@@ -3,13 +3,15 @@ name = "netadm-sys"
 version = "0.1.0"
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 colored = "2"
 rusty-doors = { git = "ssh://git@github.com/oxidecomputer/rusty-doors" }
 tracing = "0.1"
 thiserror = "1"
+libc = "0.2"
 
-[build-dependencies]
-bindgen = "0.59"
+# need https://github.com/jmesmon/rust-libzfs/commit/2bf2a5b1 for i32 type
+nvpair = { git = "ssh://git@github.com/jmesmon/rust-libzfs", branch = "master" }
+#nvpair = "0.5"
+nvpair-sys = { git = "ssh://git@github.com/jmesmon/rust-libzfs", branch = "master" }
+#nvpair-sys = "0.4"

@@ -6,6 +6,9 @@ use std::fmt::{Display, Formatter};
 use std::net::IpAddr;
 use std::str::FromStr;
 use tracing::debug;
+use std::net::{Ipv4Addr, Ipv6Addr, AddrParseError};
+use std::num::ParseIntError;
+use thiserror::Error;
 
 pub mod ioctl;
 pub mod ip;
@@ -31,10 +34,17 @@ pub enum Error {
     Conversion(#[from] std::array::TryFromSliceError),
     #[error("dlmgmtd: {0}")]
     Dlmgmtd(String),
+    #[error("ipmgmtd: {0}")]
+    Ipmgmtd(String),
     #[error("bad argument: {0}")]
     BadArgument(String),
     #[error("not found: {0}")]
     NotFound(String),
+    #[error("already exists: {0}")]
+    AlreadyExists(String),
+    #[error("nvpair: {0}")]
+    NvPair(String),
+
 }
 
 #[derive(Debug)]
@@ -61,10 +71,27 @@ pub fn get_ipaddrs() -> Result<BTreeMap<String, Vec<IpInfo>>, Error> {
     let addrs = crate::ioctl::get_ipaddrs();
 
     // TODO incorporate more persistent address information from here
-    //let paddrs = crate::ip::get_persistent_ipinfo().map_err(|e| anyhow!("{}", e))?;
+    //let paddrs = crate::ip::get_persistent_ipinfo()
+    //  .map_err(|e| anyhow!("{}", e))?;
 
     addrs
 }
+
+pub fn create_ipaddr(
+    name: impl AsRef<str>,
+    addr: IpPrefix,
+) -> Result<(), Error> {
+
+    crate::ioctl::create_ipaddr(name, addr)
+}
+
+pub fn delete_ipaddr(
+    name: impl AsRef<str>,
+) -> Result<(), Error> {
+
+    crate::ioctl::delete_ipaddr(name)
+}
+
 
 #[derive(Copy, Clone, Debug)]
 #[repr(u32)]
@@ -224,4 +251,83 @@ pub fn connect_simnet_peers(a: &LinkHandle, b: &LinkHandle) -> Result<(), Error>
     crate::link::connect_simnet_peers(a_id, b_id)?;
     crate::link::connect_simnet_peers(b_id, a_id)
     */
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum IpPrefix {
+    V4(Ipv4Prefix),
+    V6(Ipv6Prefix),
+}
+
+impl FromStr for IpPrefix {
+    type Err = IpPrefixParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+
+        match Ipv6Prefix::from_str(s) {
+            Ok(a) => return Ok(IpPrefix::V6(a)),
+            _ => Ok(IpPrefix::V4(Ipv4Prefix::from_str(s)?))
+        }
+
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Ipv6Prefix {
+    pub addr: Ipv6Addr,
+    pub mask: u8,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Ipv4Prefix {
+    pub addr: Ipv4Addr,
+    pub mask: u8,
+}
+
+#[derive(Debug, Error)]
+pub enum IpPrefixParseError {
+    #[error("expected CIDR representation <addr>/<mask")]
+    Cidr,
+
+    #[error("address parse error: {0}")]
+    Addr(#[from] AddrParseError),
+
+    #[error("mask parse error: {0}")]
+    Mask(#[from] ParseIntError),
+}
+
+impl FromStr for Ipv6Prefix {
+    type Err = IpPrefixParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+
+        let parts: Vec<&str> = s.split("/").collect();
+        if parts.len() < 2 {
+            return Err(IpPrefixParseError::Cidr);
+        }
+
+        Ok(Ipv6Prefix{
+            addr: Ipv6Addr::from_str(parts[0])?,
+            mask: u8::from_str(parts[1])?,
+        })
+
+    }
+}
+
+impl FromStr for Ipv4Prefix {
+    type Err = IpPrefixParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+
+        let parts: Vec<&str> = s.split("/").collect();
+        if parts.len() < 2 {
+            return Err(IpPrefixParseError::Cidr);
+        }
+
+        Ok(Ipv4Prefix{
+            addr: Ipv4Addr::from_str(parts[0])?,
+            mask: u8::from_str(parts[1])?,
+        })
+
+    }
 }

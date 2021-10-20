@@ -1,5 +1,6 @@
 // Copyright 2021 Oxide Computer Company
 
+
 // import generated bindings
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
@@ -8,12 +9,242 @@
 #![allow(dead_code)]
 #![allow(deref_nullptr)]
 #![allow(unaligned_references)]
-include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+//include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+
+use libc::{
+    sockaddr_storage,
+    sockaddr_in6,
+    in6_addr,
+};
+
+pub type id_t = ::std::os::raw::c_int;
+pub type uint_t = ::std::os::raw::c_uint;
+pub type zoneid_t = id_t;
+pub type caddr_t = *mut ::std::os::raw::c_char;
+pub type uchar_t = ::std::os::raw::c_uchar;
+pub type ushort_t = ::std::os::raw::c_ushort;
+pub type pid_t = ::std::os::raw::c_int;
+pub type kid_t = ::std::os::raw::c_int;
+pub type size_t = ulong_t;
+pub type longlong_t = ::std::os::raw::c_longlong;
+pub type hrtime_t = longlong_t;
+pub type u_longlong_t = ::std::os::raw::c_ulonglong;
+pub type ulong_t = ::std::os::raw::c_ulong;
+
+pub const boolean_t_B_FALSE: boolean_t = 0;
+pub const boolean_t_B_TRUE: boolean_t = 1;
+pub type boolean_t = ::std::os::raw::c_uint;
+
+pub const MAXMACADDRLEN: u32 = 20;
+pub const MAXPATHLEN: u32 = 1024;
+pub const MAXNAMELEN: u32 = 256;
+pub const MAXLINKNAMELEN: u32 = 32;
+
+pub const LIFC_NOXMIT: u32 = 1;
+pub const LIFC_EXTERNAL_SOURCE: u32 = 2;
+pub const LIFC_TEMPORARY: u32 = 4;
+pub const LIFC_ALLZONES: u32 = 8;
+pub const LIFC_UNDER_IPMP: u32 = 16;
+pub const LIFC_ENABLED: u32 = 32;
+
+pub const DLD_IOC: i32 = 0x0D1D;
+pub const AGGR_IOC: i32 = 0x0A66;
+pub const VNIC_IOC: i32 = 0x0171;
+pub const SIMNET_IOC: i32 = 0x5132;
+pub const IPTUN_IOC: i32 = 0x454A;
+pub const BRIDGE_IOC: i32 = 0xB81D;
+pub const IBPART_IOC: i32 = 0x6171;
+
+pub const IOCPARM_MASK: u32 = 0xff;
+pub const IOC_OUT: u32 = 0x40000000;
+pub const IOC_IN: u32 = 0x80000000;
+pub const IOC_INOUT: u32 = IOC_OUT | IOC_IN;
+
+pub type nvlist_t = nvlist;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct nvlist {
+    pub nvl_version: i32,
+    pub nvl_nvflag: u32,
+    pub nvl_priv: u64,
+    pub nvl_flag: u32,
+    pub nvl_pad: i32,
+}
+
+macro_rules! DLD_IOC_CMD {
+    ($modid:expr, $cmdid:expr) => {
+        ($modid << 16) | $cmdid
+    };
+}
+
+macro_rules! DLDIOC {
+    ($cmdid:expr) => {
+        DLD_IOC_CMD!(DLD_IOC, $cmdid)
+    };
+}
+
+macro_rules! IOW {
+    ($x:expr, $y:expr, $t:ty) => {
+        IOC_IN |
+        (std::mem::size_of::<$t>() as u32 & IOCPARM_MASK) << 16 |
+        ($x as u32) << 8 |
+        $y
+    };
+}
+
+macro_rules! IOWR {
+    ($x:expr, $y:expr, $t:ty) => {
+        IOC_INOUT |
+        (std::mem::size_of::<$t>() as u32 & IOCPARM_MASK) << 16 |
+        ($x as u32) << 8 |
+        $y
+    };
+}
+
+macro_rules! IOWRN {
+    ($x:expr, $y:expr, $t:expr) => {
+        IOC_INOUT |
+        ($t & IOCPARM_MASK) << 16 |
+        ($x as u32) << 8 |
+        $y
+    };
+}
+
+pub type sa_family_t = u16;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct lifnum {
+    pub lifn_family: sa_family_t,
+    pub lifn_flags: ::std::os::raw::c_int,
+    pub lifn_count: ::std::os::raw::c_int,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct lifreq {
+    pub lifr_name: [::std::os::raw::c_char; 32usize],
+    pub lifr_lifru1: lifreq_ru1,
+    pub lifr_type: uint_t,
+    pub lifr_lifru: lifreq_ru,
+}
+
+impl Default for lifreq {
+    fn default() -> lifreq {
+        lifreq {
+            lifr_name: [0; 32usize],
+            lifr_lifru1: lifreq_ru1 { lifru_ppa: 0 },
+            lifr_type: 0,
+            lifr_lifru: lifreq_ru { lifru_flags: 0 },
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub union lifreq_ru1 {
+    pub lifru_addrlen: ::std::os::raw::c_int,
+    pub lifru_ppa: uint_t,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub union lifreq_ru {
+    pub lifru_addr: sockaddr_storage,
+    pub lifru_dstaddr: sockaddr_storage,
+    pub lifru_broadaddr: sockaddr_storage,
+    pub lifru_token: sockaddr_storage,
+    pub lifru_subnet: sockaddr_storage,
+    pub lifru_index: ::std::os::raw::c_int,
+    pub lifru_flags: u64,
+    pub lifru_metric: ::std::os::raw::c_int,
+    pub lifru_mtu: uint_t,
+    pub lif_muxid: [::std::os::raw::c_int; 2usize],
+    pub lifru_nd_req: lif_nd_req,
+    pub lifru_ifinfo_req: lif_ifinfo_req,
+    pub lifru_groupname: [::std::os::raw::c_char; 32usize],
+    pub lifru_binding: [::std::os::raw::c_char; 32usize],
+    pub lifru_zoneid: zoneid_t,
+    pub lifru_dadstate: uint_t,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct lifconf {
+    pub lifc_family: sa_family_t,
+    pub lifc_flags: ::std::os::raw::c_int,
+    pub lifc_len: ::std::os::raw::c_int,
+    pub lifc_lifcu: lifconf_lifcu,
+}
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub union lifconf_lifcu {
+    pub lifcu_buf: caddr_t,
+    pub lifcu_req: *mut lifreq,
+}
+
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct lif_ifinfo_req {
+    pub lir_maxhops: u8,
+    pub lir_reachtime: u32,
+    pub lir_reachretrans: u32,
+    pub lir_maxmtu: u32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct lif_nd_req {
+    pub lnr_addr: sockaddr_storage,
+    pub lnr_state_create: u8,
+    pub lnr_state_same_lla: u8,
+    pub lnr_state_diff_lla: u8,
+    pub lnr_hdw_len: ::std::os::raw::c_int,
+    pub lnr_flags: ::std::os::raw::c_int,
+    pub lnr_pad0: ::std::os::raw::c_int,
+    pub lnr_hdw_addr: [::std::os::raw::c_char; 64usize],
+}
+
+pub const DLDIOC_MACADDRGET: i32 =  DLDIOC!(0x15);
+pub const SIOCLIFREMOVEIF: i32 =    IOW!('i',   110, lifreq) as i32;
+pub const SIOCLIFADDIF: i32 =       IOWR!('i',  111, lifreq) as i32;
+pub const SIOCSLIFADDR: i32 =       IOW!('i',   112, lifreq) as i32;
+pub const SIOCSLIFFLAGS: i32 =      IOW!('i',   116, lifreq) as i32;
+pub const SIOCGLIFFLAGS: i32 =      IOWR!('i',  117, lifreq) as i32;
+pub const SIOCGLIFNETMASK: i32 =    IOWR!('i',  125, lifreq) as i32;
+pub const SIOCSLIFNETMASK: i32 =    IOW!('i',   126, lifreq) as i32;
+pub const SIOCGLIFNUM: i32 =        IOWR!('i',  130, lifnum) as i32;
+pub const SIOCGLIFINDEX: i32 =      IOWR!('i',  133, lifreq) as i32;
+pub const SIOCGLIFCONF: i32 =       IOWRN!('i', 165, 16) as i32;
+pub const SIOCGLIFDADSTATE: i32 =   IOWR!('i',  190, lifreq) as i32;
+
+//#define	SIMNETIOC(cmdid)	DLD_IOC_CMD(SIMNET_IOC, (cmdid))
+macro_rules! SIMNETIOC {
+    ($cmdid:expr) => {
+        DLD_IOC_CMD!(SIMNET_IOC, $cmdid)
+    };
+}
+pub const SIMNET_IOC_CREATE: i32 = SIMNETIOC!(1);
+pub const SIMNET_IOC_DELETE: i32 =	SIMNETIOC!(2);
+pub const SIMNET_IOC_INFO: i32 = SIMNETIOC!(3);
+pub const SIMNET_IOC_MODIFY: i32 = SIMNETIOC!(4);
+
+//#define	VNICIOC(cmdid)		DLD_IOC_CMD(VNIC_IOC, (cmdid))
+macro_rules! VNICIOC {
+    ($cmdid:expr) => {
+        DLD_IOC_CMD!(VNIC_IOC, $cmdid)
+    };
+}
+pub const VNIC_IOC_CREATE: i32 = VNICIOC!(1);
+pub const VNIC_IOC_DELETE: i32 = VNICIOC!(2);
+pub const VNIC_IOC_INFO: i32 = VNICIOC!(3);
+pub const VNIC_IOC_MODIFY: i32 = VNICIOC!(4);
 
 //TODO work to get ipmgmt types exported by illumos, but not with ipadm types in
 //the mix, this will require some work on the ipmgmt data structures to
 //eradicate dladm types
 
+//XXX dupe with crate::ip::IpmgmtAddrObjRval
 pub type ipmgmt_aobjop_rval_t = ipmgmt_aobjop_rval_s;
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -48,20 +279,20 @@ pub type ipmgmt_door_cmd_type_t = ::std::os::raw::c_uint;
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub union ipmgmt_addr_type_cache_u {
-    pub ipmgmt_ipv6_cache_s: ipmgmt_addr_type_cache_u__bindgen_ty_1,
-    pub ipmgmt_dhcp_cache_s: ipmgmt_addr_type_cache_u__bindgen_ty_2,
+    pub ipmgmt_ipv6_cache_s: ipmgmt_addr_type_cache_ipv6,
+    pub ipmgmt_dhcp_cache_s: ipmgmt_addr_type_cache_dhcp,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone)]
-pub struct ipmgmt_addr_type_cache_u__bindgen_ty_1 {
+pub struct ipmgmt_addr_type_cache_ipv6 {
     pub ipmgmt_linklocal: boolean_t,
     pub ipmgmt_ifid: sockaddr_in6,
 }
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct ipmgmt_addr_type_cache_u__bindgen_ty_2 {
+pub struct ipmgmt_addr_type_cache_dhcp {
     pub ipmgmt_reqhost: [::std::os::raw::c_char; 256usize],
 }
 
@@ -127,6 +358,61 @@ pub const ipadm_addr_type_t_IPADM_ADDR_IPV6_ADDRCONF: ipadm_addr_type_t = 2;
 pub const ipadm_addr_type_t_IPADM_ADDR_DHCP: ipadm_addr_type_t = 3;
 pub type ipadm_addr_type_t = ::std::os::raw::c_uint;
 
+
+pub type datalink_id_t = u32;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct dld_ioc_macaddrget {
+    pub dig_linkid: datalink_id_t,
+    pub dig_count: uint_t,
+    pub dig_size: uint_t,
+}
+pub type dld_ioc_macaddrget_t = dld_ioc_macaddrget;
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct dld_macaddrinfo {
+    pub dmi_slot: uint_t,
+    pub dmi_flags: uint_t,
+    pub dmi_addrlen: uint_t,
+    pub dmi_addr: [uchar_t; 20usize],
+    pub dmi_client_name: [::std::os::raw::c_char; 256usize],
+    pub dma_client_linkid: datalink_id_t,
+}
+pub type dld_macaddrinfo_t = dld_macaddrinfo;
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct rt_metrics {
+    pub rmx_locks: u32,
+    pub rmx_mtu: u32,
+    pub rmx_hopcount: u32,
+    pub rmx_expire: u32,
+    pub rmx_recvpipe: u32,
+    pub rmx_sendpipe: u32,
+    pub rmx_ssthresh: u32,
+    pub rmx_rtt: u32,
+    pub rmx_rttvar: u32,
+    pub rmx_pksent: u32,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct rt_msghdr {
+    pub rtm_msglen: ushort_t,
+    pub rtm_version: uchar_t,
+    pub rtm_type: uchar_t,
+    pub rtm_index: ushort_t,
+    pub rtm_flags: ::std::os::raw::c_int,
+    pub rtm_addrs: ::std::os::raw::c_int,
+    pub rtm_pid: pid_t,
+    pub rtm_seq: ::std::os::raw::c_int,
+    pub rtm_errno: ::std::os::raw::c_int,
+    pub rtm_use: ::std::os::raw::c_int,
+    pub rtm_inits: uint_t,
+    pub rtm_rmx: rt_metrics,
+}
+
 impl Default for ipmgmt_aobjop_rval_t {
     fn default() -> Self {
         ipmgmt_aobjop_rval_t {
@@ -138,14 +424,14 @@ impl Default for ipmgmt_aobjop_rval_t {
             ir_flags: 0,
             ir_atype: 0,
             ir_atype_cache: ipmgmt_addr_type_cache_u {
-                ipmgmt_ipv6_cache_s: ipmgmt_addr_type_cache_u__bindgen_ty_1 {
+                ipmgmt_ipv6_cache_s: ipmgmt_addr_type_cache_ipv6 {
                     ipmgmt_linklocal: 0,
                     ipmgmt_ifid: sockaddr_in6 {
                         sin6_family: 0,
                         sin6_port: 0,
                         sin6_flowinfo: 0,
                         sin6_addr: in6_addr {
-                            _S6_un: in6_addr__bindgen_ty_1 { __S6_align: 0 },
+                            s6_addr: [0;16],
                         },
                         sin6_scope_id: 0,
                         __sin6_src_id: 0,
@@ -154,4 +440,455 @@ impl Default for ipmgmt_aobjop_rval_t {
             },
         }
     }
+}
+
+pub const IFF_UP: u32 = 1;
+pub const IFF_BROADCAST: u32 = 2;
+pub const IFF_DEBUG: u32 = 4;
+pub const IFF_LOOPBACK: u32 = 8;
+pub const IFF_POINTOPOINT: u32 = 16;
+pub const IFF_NOTRAILERS: u32 = 32;
+pub const IFF_RUNNING: u32 = 64;
+pub const IFF_NOARP: u32 = 128;
+pub const IFF_PROMISC: u32 = 256;
+pub const IFF_ALLMULTI: u32 = 512;
+pub const IFF_INTELLIGENT: u32 = 1024;
+pub const IFF_MULTICAST: u32 = 2048;
+pub const IFF_MULTI_BCAST: u32 = 4096;
+pub const IFF_UNNUMBERED: u32 = 8192;
+pub const IFF_DHCPRUNNING: u32 = 16384;
+pub const IFF_PRIVATE: u32 = 32768;
+pub const IFF_NOXMIT: u32 = 65536;
+pub const IFF_NOLOCAL: u32 = 131072;
+pub const IFF_DEPRECATED: u32 = 262144;
+pub const IFF_ADDRCONF: u32 = 524288;
+pub const IFF_ROUTER: u32 = 1048576;
+pub const IFF_NONUD: u32 = 2097152;
+pub const IFF_ANYCAST: u32 = 4194304;
+pub const IFF_NORTEXCH: u32 = 8388608;
+pub const IFF_IPV4: u32 = 16777216;
+pub const IFF_IPV6: u32 = 33554432;
+pub const IFF_NOACCEPT: u32 = 67108864;
+pub const IFF_NOFAILOVER: u32 = 134217728;
+pub const IFF_FAILED: u32 = 268435456;
+pub const IFF_STANDBY: u32 = 536870912;
+pub const IFF_INACTIVE: u32 = 1073741824;
+pub const IFF_OFFLINE: u32 = 2147483648;
+pub const IFF_XRESOLV: u64 = 4294967296;
+pub const IFF_COS_ENABLED: u64 = 8589934592;
+pub const IFF_PREFERRED: u64 = 17179869184;
+pub const IFF_TEMPORARY: u64 = 34359738368;
+pub const IFF_FIXEDMTU: u64 = 68719476736;
+pub const IFF_VIRTUAL: u64 = 137438953472;
+pub const IFF_DUPLICATE: u64 = 274877906944;
+pub const IFF_IPMP: u64 = 549755813888;
+pub const IFF_VRRP: u64 = 1099511627776;
+pub const IFF_NOLINKLOCAL: u64 = 2199023255552;
+pub const IFF_L3PROTECT: u64 = 4398046511104;
+pub const IFF_CANTCHANGE: u64 = 8736013826906;
+pub const IFF_IPMP_CANTCHANGE: u32 = 268435456;
+pub const IFF_IPMP_INVALID: u64 = 8256487552;
+
+pub const IPMGMT_ACTIVE: u32 = 0x00000001;
+pub const IPMGMT_PERSIST: u32 = 0x00000002;
+pub const IPMGMT_INIT: u32 = 0x00000004;
+pub const IPMGMT_PROPS_ONLY: u32 = 0x00000008;
+
+
+extern "C" {
+    pub static mut errno: ::std::os::raw::c_int;
+    pub fn strerror(errnum: i32) -> *mut std::os::raw::c_char;
+}
+
+pub fn errno_string() -> String {
+    let s = unsafe{ std::ffi::CStr::from_ptr(strerror(errno)) };
+    match s.to_str() {
+        Err(_) => "".to_string(),
+        Ok(s) => s.to_string(),
+    }
+}
+
+pub fn err_string(err: i32) -> String {
+    let s = unsafe{ std::ffi::CStr::from_ptr(strerror(err)) };
+    match s.to_str() {
+        Err(_) => "".to_string(),
+        Ok(s) => s.to_string(),
+    }
+}
+
+pub type kstat_ctl_t = kstat_ctl;
+extern "C" {
+    pub fn kstat_open() -> *mut kstat_ctl_t;
+    pub fn kstat_lookup(
+        arg1: *mut kstat_ctl_t,
+        arg2: *mut ::std::os::raw::c_char,
+        arg3: ::std::os::raw::c_int,
+        arg4: *mut ::std::os::raw::c_char,
+    ) -> *mut kstat_t;
+    pub fn kstat_close(arg1: *mut kstat_ctl_t) -> ::std::os::raw::c_int;
+    pub fn kstat_read(
+        arg1: *mut kstat_ctl_t,
+        arg2: *mut kstat_t,
+        arg3: *mut ::std::os::raw::c_void,
+    ) -> kid_t;
+    pub fn kstat_write(
+        arg1: *mut kstat_ctl_t,
+        arg2: *mut kstat_t,
+        arg3: *mut ::std::os::raw::c_void,
+    ) -> kid_t;
+    pub fn kstat_data_lookup(
+        arg1: *mut kstat_t,
+        arg2: *mut ::std::os::raw::c_char,
+    ) -> *mut ::std::os::raw::c_void;
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct kstat_ctl {
+    pub kc_chain_id: kid_t,
+    pub kc_chain: *mut kstat_t,
+    pub kc_kd: ::std::os::raw::c_int,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct kstat {
+    pub ks_crtime: hrtime_t,
+    pub ks_next: *mut kstat,
+    pub ks_kid: kid_t,
+    pub ks_module: [::std::os::raw::c_char; 31usize],
+    pub ks_resv: uchar_t,
+    pub ks_instance: ::std::os::raw::c_int,
+    pub ks_name: [::std::os::raw::c_char; 31usize],
+    pub ks_type: uchar_t,
+    pub ks_class: [::std::os::raw::c_char; 31usize],
+    pub ks_flags: uchar_t,
+    pub ks_data: *mut ::std::os::raw::c_void,
+    pub ks_ndata: uint_t,
+    pub ks_data_size: size_t,
+    pub ks_snaptime: hrtime_t,
+    pub ks_update: ::std::option::Option<
+        unsafe extern "C" fn(
+            arg1: *mut kstat,
+            arg2: ::std::os::raw::c_int,
+        ) -> ::std::os::raw::c_int,
+    >,
+    pub ks_private: *mut ::std::os::raw::c_void,
+    pub ks_snapshot: ::std::option::Option<
+        unsafe extern "C" fn(
+            arg1: *mut kstat,
+            arg2: *mut ::std::os::raw::c_void,
+            arg3: ::std::os::raw::c_int,
+        ) -> ::std::os::raw::c_int,
+    >,
+    pub ks_lock: *mut ::std::os::raw::c_void,
+}
+pub type kstat_t = kstat;
+
+pub const glif_dad_state_t_DAD_IN_PROGRESS: glif_dad_state_t = 1;
+pub const glif_dad_state_t_DAD_DONE: glif_dad_state_t = 2;
+pub type glif_dad_state_t = ::std::os::raw::c_uint;
+
+pub const DL_CSMACD: u32 = 0;
+pub const DL_TPB: u32 = 1;
+pub const DL_TPR: u32 = 2;
+pub const DL_METRO: u32 = 3;
+pub const DL_ETHER: u32 = 4;
+pub const DL_HDLC: u32 = 5;
+pub const DL_CHAR: u32 = 6;
+pub const DL_CTCA: u32 = 7;
+pub const DL_FDDI: u32 = 8;
+pub const DL_FC: u32 = 16;
+pub const DL_ATM: u32 = 17;
+pub const DL_IPATM: u32 = 18;
+pub const DL_X25: u32 = 19;
+pub const DL_ISDN: u32 = 20;
+pub const DL_HIPPI: u32 = 21;
+pub const DL_100VG: u32 = 22;
+pub const DL_100VGTPR: u32 = 23;
+pub const DL_ETH_CSMA: u32 = 24;
+pub const DL_100BT: u32 = 25;
+pub const DL_IB: u32 = 26;
+pub const DL_FRAME: u32 = 10;
+pub const DL_MPFRAME: u32 = 11;
+pub const DL_ASYNC: u32 = 12;
+pub const DL_IPX25: u32 = 13;
+pub const DL_LOOP: u32 = 14;
+pub const DL_OTHER: u32 = 9;
+
+pub const link_state_t_LINK_STATE_UNKNOWN: link_state_t = -1;
+pub const link_state_t_LINK_STATE_DOWN: link_state_t = 0;
+pub const link_state_t_LINK_STATE_UP: link_state_t = 1;
+pub type link_state_t = ::std::os::raw::c_int;
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct kstat_named {
+    pub name: [::std::os::raw::c_char; 31usize],
+    pub data_type: uchar_t,
+    pub value: kstat_named_value,
+}
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub union kstat_named_value {
+    pub c: [::std::os::raw::c_char; 16usize],
+    pub i32_: i32,
+    pub ui32: u32,
+    pub str_: kstat_named_value_str,
+    pub i64_: i64,
+    pub ui64: u64,
+    pub l: ::std::os::raw::c_long,
+    pub ul: ulong_t,
+    pub ll: longlong_t,
+    pub ull: u_longlong_t,
+    pub f: f32,
+    pub d: f64,
+}
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct kstat_named_value_str {
+    pub addr: kstat_named_value_str_addr,
+    pub len: u32,
+}
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub union kstat_named_value_str_addr {
+    pub ptr: *mut ::std::os::raw::c_char,
+    pub __pad: [::std::os::raw::c_char; 8usize],
+}
+
+pub type kstat_named_t = kstat_named;
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct vopstats {
+    pub nopen: kstat_named_t,
+    pub nclose: kstat_named_t,
+    pub nread: kstat_named_t,
+    pub read_bytes: kstat_named_t,
+    pub nwrite: kstat_named_t,
+    pub write_bytes: kstat_named_t,
+    pub nioctl: kstat_named_t,
+    pub nsetfl: kstat_named_t,
+    pub ngetattr: kstat_named_t,
+    pub nsetattr: kstat_named_t,
+    pub naccess: kstat_named_t,
+    pub nlookup: kstat_named_t,
+    pub ncreate: kstat_named_t,
+    pub nremove: kstat_named_t,
+    pub nlink: kstat_named_t,
+    pub nrename: kstat_named_t,
+    pub nmkdir: kstat_named_t,
+    pub nrmdir: kstat_named_t,
+    pub nreaddir: kstat_named_t,
+    pub readdir_bytes: kstat_named_t,
+    pub nsymlink: kstat_named_t,
+    pub nreadlink: kstat_named_t,
+    pub nfsync: kstat_named_t,
+    pub ninactive: kstat_named_t,
+    pub nfid: kstat_named_t,
+    pub nrwlock: kstat_named_t,
+    pub nrwunlock: kstat_named_t,
+    pub nseek: kstat_named_t,
+    pub ncmp: kstat_named_t,
+    pub nfrlock: kstat_named_t,
+    pub nspace: kstat_named_t,
+    pub nrealvp: kstat_named_t,
+    pub ngetpage: kstat_named_t,
+    pub nputpage: kstat_named_t,
+    pub nmap: kstat_named_t,
+    pub naddmap: kstat_named_t,
+    pub ndelmap: kstat_named_t,
+    pub npoll: kstat_named_t,
+    pub ndump: kstat_named_t,
+    pub npathconf: kstat_named_t,
+    pub npageio: kstat_named_t,
+    pub ndumpctl: kstat_named_t,
+    pub ndispose: kstat_named_t,
+    pub nsetsecattr: kstat_named_t,
+    pub ngetsecattr: kstat_named_t,
+    pub nshrlock: kstat_named_t,
+    pub nvnevent: kstat_named_t,
+    pub nreqzcbuf: kstat_named_t,
+    pub nretzcbuf: kstat_named_t,
+}
+
+pub const KSTAT_STRLEN: u32 = 31;
+pub const KSTAT_TYPE_RAW: u32 = 0;
+pub const KSTAT_TYPE_NAMED: u32 = 1;
+pub const KSTAT_TYPE_INTR: u32 = 2;
+pub const KSTAT_TYPE_IO: u32 = 3;
+pub const KSTAT_TYPE_TIMER: u32 = 4;
+pub const KSTAT_NUM_TYPES: u32 = 5;
+pub const KSTAT_FLAG_VIRTUAL: u32 = 1;
+pub const KSTAT_FLAG_VAR_SIZE: u32 = 2;
+pub const KSTAT_FLAG_WRITABLE: u32 = 4;
+pub const KSTAT_FLAG_PERSISTENT: u32 = 8;
+pub const KSTAT_FLAG_DORMANT: u32 = 16;
+pub const KSTAT_FLAG_INVALID: u32 = 32;
+pub const KSTAT_FLAG_LONGSTRINGS: u32 = 64;
+pub const KSTAT_READ: u32 = 0;
+pub const KSTAT_WRITE: u32 = 1;
+pub const KSTAT_DATA_CHAR: u32 = 0;
+pub const KSTAT_DATA_INT32: u32 = 1;
+pub const KSTAT_DATA_UINT32: u32 = 2;
+pub const KSTAT_DATA_INT64: u32 = 3;
+pub const KSTAT_DATA_UINT64: u32 = 4;
+pub const KSTAT_DATA_LONG: u32 = 3;
+pub const KSTAT_DATA_ULONG: u32 = 4;
+pub const KSTAT_DATA_STRING: u32 = 9;
+pub const KSTAT_DATA_LONGLONG: u32 = 3;
+pub const KSTAT_DATA_ULONGLONG: u32 = 4;
+pub const KSTAT_DATA_FLOAT: u32 = 5;
+pub const KSTAT_DATA_DOUBLE: u32 = 6;
+pub const KSTAT_INTR_HARD: u32 = 0;
+pub const KSTAT_INTR_SOFT: u32 = 1;
+pub const KSTAT_INTR_WATCHDOG: u32 = 2;
+pub const KSTAT_INTR_SPURIOUS: u32 = 3;
+pub const KSTAT_INTR_MULTSVC: u32 = 4;
+pub const KSTAT_NUM_INTRS: u32 = 5;
+
+pub const EPERM: u32 = 1;
+pub const ENOENT: u32 = 2;
+pub const ESRCH: u32 = 3;
+pub const EINTR: u32 = 4;
+pub const EIO: u32 = 5;
+pub const ENXIO: u32 = 6;
+pub const E2BIG: u32 = 7;
+pub const ENOEXEC: u32 = 8;
+pub const EBADF: u32 = 9;
+pub const ECHILD: u32 = 10;
+pub const EAGAIN: u32 = 11;
+pub const ENOMEM: u32 = 12;
+pub const EACCES: u32 = 13;
+pub const EFAULT: u32 = 14;
+pub const ENOTBLK: u32 = 15;
+pub const EBUSY: u32 = 16;
+pub const EEXIST: u32 = 17;
+pub const EXDEV: u32 = 18;
+pub const ENODEV: u32 = 19;
+pub const ENOTDIR: u32 = 20;
+pub const EISDIR: u32 = 21;
+pub const EINVAL: u32 = 22;
+pub const ENFILE: u32 = 23;
+pub const EMFILE: u32 = 24;
+pub const ENOTTY: u32 = 25;
+pub const ETXTBSY: u32 = 26;
+pub const EFBIG: u32 = 27;
+pub const ENOSPC: u32 = 28;
+pub const ESPIPE: u32 = 29;
+pub const EROFS: u32 = 30;
+pub const EMLINK: u32 = 31;
+pub const EPIPE: u32 = 32;
+pub const EDOM: u32 = 33;
+pub const ERANGE: u32 = 34;
+pub const ENOMSG: u32 = 35;
+pub const EIDRM: u32 = 36;
+pub const ECHRNG: u32 = 37;
+pub const EL2NSYNC: u32 = 38;
+pub const EL3HLT: u32 = 39;
+pub const EL3RST: u32 = 40;
+pub const ELNRNG: u32 = 41;
+pub const EUNATCH: u32 = 42;
+pub const ENOCSI: u32 = 43;
+pub const EL2HLT: u32 = 44;
+pub const EDEADLK: u32 = 45;
+pub const ENOLCK: u32 = 46;
+pub const ECANCELED: u32 = 47;
+pub const ENOTSUP: u32 = 48;
+pub const EDQUOT: u32 = 49;
+pub const EBADE: u32 = 50;
+pub const EBADR: u32 = 51;
+pub const EXFULL: u32 = 52;
+pub const ENOANO: u32 = 53;
+pub const EBADRQC: u32 = 54;
+pub const EBADSLT: u32 = 55;
+pub const EDEADLOCK: u32 = 56;
+pub const EBFONT: u32 = 57;
+pub const EOWNERDEAD: u32 = 58;
+pub const ENOTRECOVERABLE: u32 = 59;
+pub const ENOSTR: u32 = 60;
+pub const ENODATA: u32 = 61;
+pub const ETIME: u32 = 62;
+pub const ENOSR: u32 = 63;
+pub const ENONET: u32 = 64;
+pub const ENOPKG: u32 = 65;
+pub const EREMOTE: u32 = 66;
+pub const ENOLINK: u32 = 67;
+pub const EADV: u32 = 68;
+pub const ESRMNT: u32 = 69;
+pub const ECOMM: u32 = 70;
+pub const EPROTO: u32 = 71;
+pub const ELOCKUNMAPPED: u32 = 72;
+pub const ENOTACTIVE: u32 = 73;
+pub const EMULTIHOP: u32 = 74;
+pub const EBADMSG: u32 = 77;
+pub const ENAMETOOLONG: u32 = 78;
+pub const EOVERFLOW: u32 = 79;
+pub const ENOTUNIQ: u32 = 80;
+pub const EBADFD: u32 = 81;
+pub const EREMCHG: u32 = 82;
+pub const ELIBACC: u32 = 83;
+pub const ELIBBAD: u32 = 84;
+pub const ELIBSCN: u32 = 85;
+pub const ELIBMAX: u32 = 86;
+pub const ELIBEXEC: u32 = 87;
+pub const EILSEQ: u32 = 88;
+pub const ENOSYS: u32 = 89;
+pub const ELOOP: u32 = 90;
+pub const ERESTART: u32 = 91;
+pub const ESTRPIPE: u32 = 92;
+pub const ENOTEMPTY: u32 = 93;
+pub const EUSERS: u32 = 94;
+pub const ENOTSOCK: u32 = 95;
+pub const EDESTADDRREQ: u32 = 96;
+pub const EMSGSIZE: u32 = 97;
+pub const EPROTOTYPE: u32 = 98;
+pub const ENOPROTOOPT: u32 = 99;
+pub const EPROTONOSUPPORT: u32 = 120;
+pub const ESOCKTNOSUPPORT: u32 = 121;
+pub const EOPNOTSUPP: u32 = 122;
+pub const EPFNOSUPPORT: u32 = 123;
+pub const EAFNOSUPPORT: u32 = 124;
+pub const EADDRINUSE: u32 = 125;
+pub const EADDRNOTAVAIL: u32 = 126;
+pub const ENETDOWN: u32 = 127;
+pub const ENETUNREACH: u32 = 128;
+pub const ENETRESET: u32 = 129;
+pub const ECONNABORTED: u32 = 130;
+pub const ECONNRESET: u32 = 131;
+pub const ENOBUFS: u32 = 132;
+pub const EISCONN: u32 = 133;
+pub const ENOTCONN: u32 = 134;
+pub const ESHUTDOWN: u32 = 143;
+pub const ETOOMANYREFS: u32 = 144;
+pub const ETIMEDOUT: u32 = 145;
+pub const ECONNREFUSED: u32 = 146;
+pub const EHOSTDOWN: u32 = 147;
+pub const EHOSTUNREACH: u32 = 148;
+pub const EWOULDBLOCK: u32 = 11;
+pub const EALREADY: u32 = 149;
+pub const EINPROGRESS: u32 = 150;
+pub const ESTALE: u32 = 151;
+
+pub const RTM_VERSION: u32 = 3;
+pub const RTM_ADD: u32 = 1;
+pub const RTM_DELETE: u32 = 2;
+pub const RTM_CHANGE: u32 = 3;
+pub const RTM_GET: u32 = 4;
+pub const RTM_LOSING: u32 = 5;
+pub const RTM_REDIRECT: u32 = 6;
+pub const RTM_MISS: u32 = 7;
+pub const RTM_LOCK: u32 = 8;
+pub const RTM_OLDADD: u32 = 9;
+pub const RTM_OLDDEL: u32 = 10;
+pub const RTM_RESOLVE: u32 = 11;
+pub const RTM_NEWADDR: u32 = 12;
+pub const RTM_DELADDR: u32 = 13;
+pub const RTM_IFINFO: u32 = 14;
+pub const RTM_CHGADDR: u32 = 15;
+pub const RTM_FREEADDR: u32 = 16;
+pub const RTM_GETALL: u32 = 17;
+
+extern "C" {
+    pub fn getpid() -> pid_t;
 }

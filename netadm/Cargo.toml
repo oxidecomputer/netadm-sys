@@ -9,7 +9,6 @@ edition = "2018"
 anyhow = "1.0"
 clap = { version = "3.0.0-beta.4", features = ["color"] }
 netadm-sys = { path = "../lib" }
-rusty-doors = { git = "ssh://git@github.com/oxidecomputer/rusty-doors" }
 tabwriter = { version = "1", features = ["ansi_formatting"] }
 colored = "2"
 tracing = "0.1"

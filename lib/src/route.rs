@@ -1,7 +1,18 @@
 // Copyright 2021 Oxide Computer Company
 
 use crate::sys::{
-    self, close, read, rt_metrics, rt_msghdr, sockaddr_in, socket, write, AF_UNSPEC, PF_ROUTE,
+    self,
+    rt_metrics,
+    rt_msghdr,
+};
+use libc::{
+    close,
+    read,
+    sockaddr_in,
+    socket,
+    write,
+    AF_UNSPEC,
+    AF_ROUTE,
     SOCK_RAW,
 };
 use std::mem::size_of;
@@ -35,7 +46,7 @@ pub fn get_routes() -> Result<Vec<Route>, Error> {
     let mut result = Vec::new();
 
     unsafe {
-        let sfd = socket(PF_ROUTE as i32, SOCK_RAW as i32, AF_UNSPEC as i32);
+        let sfd = socket(AF_ROUTE as i32, SOCK_RAW as i32, AF_UNSPEC as i32);
         if sfd < 0 {
             return Err(Error::SystemError(format!("socket: {}", sys::errno)));
         }
@@ -69,7 +80,7 @@ pub fn get_routes() -> Result<Vec<Route>, Error> {
         let mut n = write(
             sfd,
             (&req as *const rt_msghdr) as *const c_void,
-            req.rtm_msglen as u64,
+            req.rtm_msglen as usize,
         );
         if n <= 0 {
             return Err(Error::SystemError(format!("write: {} {}", n, sys::errno)));
@@ -87,9 +98,9 @@ pub fn get_routes() -> Result<Vec<Route>, Error> {
             let mask = gw.offset(1) as *mut sockaddr_in;
 
             result.push(Route {
-                dest: IpAddr::V4(Ipv4Addr::from(u32::from_be((*dst).sin_addr.S_un.S_addr))),
-                mask: u32::leading_ones(u32::from_be((*mask).sin_addr.S_un.S_addr)),
-                gw: IpAddr::V4(Ipv4Addr::from(u32::from_be((*gw).sin_addr.S_un.S_addr))),
+                dest: IpAddr::V4(Ipv4Addr::from(u32::from_be((*dst).sin_addr.s_addr))),
+                mask: u32::leading_ones(u32::from_be((*mask).sin_addr.s_addr)),
+                gw: IpAddr::V4(Ipv4Addr::from(u32::from_be((*gw).sin_addr.s_addr))),
             });
 
             p = mask.offset(1) as *mut u8;

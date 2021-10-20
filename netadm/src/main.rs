@@ -4,8 +4,19 @@ use anyhow::{anyhow, Result};
 use clap::{AppSettings, Clap};
 use colored::*;
 use netadm_sys::{
-    self, create_simnet_link, create_vnic_link, get_ipaddrs, get_link, get_links, ip, route,
-    IpState, LinkFlags, LinkHandle,
+    self,
+    create_simnet_link,
+    create_vnic_link,
+    create_ipaddr,
+    get_ipaddrs,
+    get_link,
+    get_links,
+    ip,
+    route,
+    IpState,
+    LinkFlags,
+    LinkHandle,
+    IpPrefix,
 };
 use std::io::{stdout, Write};
 use std::net::IpAddr;
@@ -35,7 +46,7 @@ enum SubCommand {
     Show(Show),
     #[clap(about = "create things")]
     Create(Create),
-    #[clap(about = "delete a link")]
+    #[clap(about = "delete things")]
     Delete(Delete),
     #[clap(about = "connect two simnet peers")]
     Connect(SimnetConnect),
@@ -91,12 +102,16 @@ enum CreateSubCommand {
     Simnet(CreateSimnet),
     #[clap(about = "create a vnic interface")]
     Vnic(CreateVnic),
+    #[clap(about = "create an ip address")]
+    Addr(CreateAddr),
 }
 
 #[derive(Clap)]
 enum DeleteSubCommand {
     #[clap(about = "delete a link-layer interface")]
     Link(DeleteLink),
+    #[clap(about = "delete an ip address")]
+    Addr(DeleteAddr),
 }
 
 #[derive(Clap)]
@@ -117,9 +132,25 @@ struct CreateVnic {
 
 #[derive(Clap)]
 #[clap(setting = AppSettings::ColoredHelp)]
+struct CreateAddr {
+    #[clap(about = "name for the new address")]
+    name: String,
+    #[clap(about = "address to create")]
+    addr: IpPrefix,
+}
+
+#[derive(Clap)]
+#[clap(setting = AppSettings::ColoredHelp)]
 struct DeleteLink {
     #[clap(about = "link-id or name")]
     handle: LinkHandle,
+}
+
+#[derive(Clap)]
+#[clap(setting = AppSettings::ColoredHelp)]
+struct DeleteAddr {
+    #[clap(about = "address name")]
+    name: String,
 }
 
 #[derive(Clap)]
@@ -158,17 +189,30 @@ fn main() {
             },
         },
         SubCommand::Create(ref c) => match c.subcmd {
-            CreateSubCommand::Simnet(ref sim) => match create_simnet(&opts, &c, &sim) {
+            CreateSubCommand::Simnet(ref sim) => match create_simnet(
+                &opts, &c, &sim) {
                 Ok(()) => {}
                 Err(e) => error!("{}", e),
             },
-            CreateSubCommand::Vnic(ref vnic) => match create_vnic(&opts, &c, &vnic) {
+            CreateSubCommand::Vnic(ref vnic) => match create_vnic(
+                &opts, &c, &vnic) {
+                Ok(()) => {}
+                Err(e) => error!("{}", e),
+            },
+            CreateSubCommand::Addr(ref addr) => match create_addr(
+                &opts, &c, &addr) {
                 Ok(()) => {}
                 Err(e) => error!("{}", e),
             },
         },
         SubCommand::Delete(ref d) => match d.subcmd {
-            DeleteSubCommand::Link(ref sim) => match delete_link(&opts, &d, &sim) {
+            DeleteSubCommand::Link(ref lnk) => match delete_link(
+                &opts, &d, &lnk) {
+                Ok(()) => {}
+                Err(e) => error!("{}", e),
+            },
+            DeleteSubCommand::Addr(ref addr) => match delete_addr(
+                &opts, &d, &addr) {
                 Ok(()) => {}
                 Err(e) => error!("{}", e),
             },
@@ -184,8 +228,12 @@ fn connect_simnet_peers(_opts: &Opts, c: &SimnetConnect) -> Result<()> {
     Ok(netadm_sys::connect_simnet_peers(&c.sim_a, &c.sim_b)?)
 }
 
-fn delete_link(_opts: &Opts, _d: &Delete, s: &DeleteLink) -> Result<()> {
-    Ok(netadm_sys::delete_link(&s.handle, LinkFlags::Active)?)
+fn delete_link(_opts: &Opts, _d: &Delete, l: &DeleteLink) -> Result<()> {
+    Ok(netadm_sys::delete_link(&l.handle, LinkFlags::Active)?)
+}
+
+fn delete_addr(_opts: &Opts, _d: &Delete, a: &DeleteAddr) -> Result<()> {
+    Ok(netadm_sys::delete_ipaddr(&a.name)?)
 }
 
 fn create_simnet(_opts: &Opts, _c: &Create, s: &CreateSimnet) -> Result<()> {
@@ -196,6 +244,12 @@ fn create_simnet(_opts: &Opts, _c: &Create, s: &CreateSimnet) -> Result<()> {
 
 fn create_vnic(_opts: &Opts, _c: &Create, s: &CreateVnic) -> Result<()> {
     create_vnic_link(&s.name, &s.link, LinkFlags::Active)?;
+    // should we print back?
+    Ok(())
+}
+
+fn create_addr(_opts: &Opts, _c: &Create, c: &CreateAddr) -> Result<()> {
+    create_ipaddr(&c.name, c.addr)?;
     // should we print back?
     Ok(())
 }
@@ -278,7 +332,8 @@ fn show_addrs(_opts: &Opts, _s: &Show, _a: &ShowAddrs) -> Result<()> {
     for (ifx, addrs) in addrs {
         for addr in &addrs {
             let (addrobj, src) =
-                ip::ifname_to_addrobj(ifx.as_str(), addr.family).map_err(|e| anyhow!("{}", e))?;
+                ip::ifname_to_addrobj(
+                    ifx.as_str(), addr.family).map_err(|e| anyhow!("{}", e))?;
 
             //TODO gross get an enum
             if src == "none" {

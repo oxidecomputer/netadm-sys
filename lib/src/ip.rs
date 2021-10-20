@@ -11,10 +11,17 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use std::os::unix::io::AsRawFd;
 use std::str::FromStr;
 use tracing::{debug, trace, warn};
+use libc::{
+    malloc,
+    free,
+    sockaddr_in6,
+};
+use std::os::raw::c_char;
 
 #[derive(Debug)]
 #[repr(i32)]
 pub enum IpmgmtCmd {
+    Unset = 0,
     SetProp = 1,
     SetIf = 2,
     SetAddr = 3,
@@ -42,6 +49,14 @@ pub struct IpmgmtGetAddr {
     pub objname: [u8; 64],
 }
 
+#[derive(Debug)]
+#[repr(C)]
+pub struct IpmgmtSetAddr {
+    pub cmd: IpmgmtCmd,
+    pub flags: u32,
+    pub nvlsize: u32, //NOTE: this is a size_t in libipadm.h which is bad news for doors
+}
+
 impl Default for IpmgmtGetAddr {
     fn default() -> Self {
         IpmgmtGetAddr {
@@ -50,6 +65,20 @@ impl Default for IpmgmtGetAddr {
             ifname: [0; 32],
             family: 0,
             objname: [0; 64],
+        }
+    }
+}
+
+#[derive(Debug)]
+#[repr(C)]
+pub struct IpmgmtRval {
+    pub err: i32,
+}
+
+impl Default for IpmgmtRval {
+    fn default() -> Self {
+        IpmgmtRval {
+            err: 0,
         }
     }
 }
@@ -70,6 +99,134 @@ impl Default for IpmgmtGetRval {
         }
     }
 }
+
+pub const LIFNAMSIZ: u32 = 32;
+pub const IPADM_AOBJ_USTRSIZ: u32 = 32;
+pub const IPADM_AOBJSIZ: u32 = LIFNAMSIZ + IPADM_AOBJ_USTRSIZ;
+
+#[derive(Debug, Copy, Clone)]
+#[repr(i32)]
+pub enum AddrType {
+    AddrNone,
+    Static,
+    Ipv6Addrconf,
+    Dhcp,
+}
+
+impl Default for AddrType {
+    fn default() -> Self {
+        AddrType::AddrNone
+    }
+}
+
+#[repr(C)]
+pub struct IpmgmtAobjopArg {
+    pub cmd: IpmgmtCmd,
+    pub flags: u32,
+    pub objname: [c_char; IPADM_AOBJSIZ as usize],
+    pub ifname: [c_char; LIFNAMSIZ as usize],
+    pub lnum: i32,
+    pub family: u16,
+    pub atype: AddrType
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct IpmgmtAobjopRval {
+    pub err: i32,
+    pub objname: [c_char; IPADM_AOBJSIZ as usize],
+    pub ifname: [c_char; LIFNAMSIZ as usize],
+    pub lnum: i32,
+    pub family: u16,
+    pub atype: AddrType,
+    pub atype_cache: IpmgmtAddrTypeCache,
+}
+
+impl Default for IpmgmtAobjopRval {
+    fn default() -> Self {
+        IpmgmtAobjopRval{
+            err: 0,
+            objname: [0; IPADM_AOBJSIZ as usize],
+            ifname: [0; LIFNAMSIZ as usize],
+            lnum: 0,
+            family: 0,
+            atype: AddrType::default(),
+            atype_cache: IpmgmtAddrTypeCache::default(),
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub union IpmgmtAddrTypeCache {
+    pub ipv6_cache: IpmgmtIpv6Cache,
+    pub dhcp_cache: IpmgmtDhcpCache,
+}
+
+impl Default for IpmgmtAddrTypeCache {
+    fn default() -> Self {
+        IpmgmtAddrTypeCache{
+            ipv6_cache: IpmgmtIpv6Cache::default(),
+        }
+    }
+}
+
+// for C interop compat
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub enum BooleanT {
+    False,
+    True,
+}
+
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct IpmgmtIpv6Cache {
+    pub linklocal: BooleanT,
+    pub ifid: sockaddr_in6,
+}
+
+impl Default for IpmgmtIpv6Cache {
+    fn default() -> Self {
+        IpmgmtIpv6Cache {
+            linklocal: BooleanT::False,
+            ifid: sockaddr_in6{
+                sin6_family: 0,
+                sin6_port: 0,
+                sin6_flowinfo: 0,
+                sin6_addr: libc::in6_addr{
+                    s6_addr: [0; 16],
+                },
+                sin6_scope_id: 0,
+                __sin6_src_id: 0,
+            }
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct IpmgmtDhcpCache {
+    pub reqhost: [c_char; 256usize],
+}
+
+impl Default for IpmgmtDhcpCache {
+    fn default() -> Self {
+        IpmgmtDhcpCache{ reqhost: [0; 256] }
+    }
+}
+
+/*
+#[derive(Debug)]
+#[repr(C)]
+pub struct IpmgmtAddrArg {
+    pub cmd: IpmgmtCmd,
+    pub flags: u32,
+    pub objname: [c_char; IPADM_AOBJSIZ as usize],
+    pub lnum: u32,
+}
+*/
 
 #[derive(Debug)]
 pub struct IpInfo {
@@ -116,22 +273,27 @@ pub struct Intfid {
     pub stateful: bool,
 }
 
-pub fn get_persistent_ipinfo() -> Result<HashMap<String, HashMap<String, IpInfo>>, String> {
+pub fn get_persistent_ipinfo() 
+-> Result<HashMap<String, HashMap<String, IpInfo>>, String> {
     unsafe {
         //// call the ipadmd door to get address information
 
         let f = File::open("/etc/svc/volatile/ipadm/ipmgmt_door")
             .map_err(|e| format!("door open: {}", e))?;
 
-        // This memory may get realloc'd by the door call, so we cannot use a Box :/
-        let mut response: *mut IpmgmtGetRval = rusty_doors::sys::malloc(std::mem::size_of::<
+        // This memory may get realloc'd by the door call, so we cannot use a
+        // Box :/
+        let mut response: *mut IpmgmtGetRval = malloc(std::mem::size_of::<
             IpmgmtGetRval,
-        >() as u64) as *mut IpmgmtGetRval;
+        >()) as *mut IpmgmtGetRval;
 
         let request = IpmgmtGetAddr {
             ..Default::default()
         };
-        let resp: *mut IpmgmtGetRval = door_callp(f.as_raw_fd(), request, &mut response);
+        let resp: *mut IpmgmtGetRval = door_callp(
+            f.as_raw_fd(),
+            request,
+            &mut response);
         trace!("got {} bytes of nval", (*resp).nval_size);
 
         //// extract nvlist  header
@@ -163,13 +325,14 @@ pub fn get_persistent_ipinfo() -> Result<HashMap<String, HashMap<String, IpInfo>
         let (nvps, _) = extract_nvps(p, end);
         trace!("NVPs: {:#?}", nvps);
 
-        rusty_doors::sys::free(resp as *mut std::os::raw::c_void);
+        free(resp as *mut std::os::raw::c_void);
 
         Ok(handle_nvps(&nvps))
     }
 }
 
-fn handle_nvps(nvps: &Vec<NVP<'static>>) -> HashMap<String, HashMap<String, IpInfo>> {
+fn handle_nvps(nvps: &Vec<NVP<'static>>) 
+-> HashMap<String, HashMap<String, IpInfo>> {
     let mut result = HashMap::new();
 
     for nvp in nvps.iter() {
@@ -280,9 +443,11 @@ fn handle_nvp(nvp: &NVP<'static>) -> Option<IpInfo> {
                     }
                     match &mut ip_properties {
                         Some(props) => match props {
-                            IpProperties::Dhcp(props) => props.parameters = Some(dcp),
+                            IpProperties::Dhcp(props) => {
+                                props.parameters = Some(dcp)
+                            }
                             _ => {
-                                warn!("dhcp client params found in non-dhcp record");
+                                warn!("dhcp client params in non-dhcp record");
                             }
                         },
                         None => {
@@ -339,7 +504,9 @@ fn handle_nvp(nvp: &NVP<'static>) -> Option<IpInfo> {
                             match v.value {
                                 Value::Uint8Array(u) => {
                                     intfid.addr = match u.try_into()
-                                        as Result<[u8; 16], <&[u8] as TryInto<[u8; 16]>>::Error>
+                                        as Result<
+                                            [u8; 16], 
+                                            <&[u8] as TryInto<[u8; 16]>>::Error>
                                     {
                                         Ok(addr) => Ipv6Addr::from(addr),
                                         Err(_) => continue,
@@ -388,7 +555,8 @@ fn handle_nvp(nvp: &NVP<'static>) -> Option<IpInfo> {
                             Value::Str(s) => match Ipv4Addr::from_str(s) {
                                 Ok(addr) => {
                                     ip_properties =
-                                        Some(IpProperties::V4Static(V4Static { addr: addr }));
+                                        Some(IpProperties::V4Static(
+                                                V4Static { addr: addr }));
                                 }
                                 _ => {
                                     warn!("bad ipv4 address: {}", s)
@@ -410,7 +578,8 @@ fn handle_nvp(nvp: &NVP<'static>) -> Option<IpInfo> {
                             Value::Str(s) => match Ipv6Addr::from_str(s) {
                                 Ok(addr) => {
                                     ip_properties =
-                                        Some(IpProperties::V6Static(V6Static { addr: addr }));
+                                        Some(IpProperties::V6Static(
+                                                V6Static { addr: addr }));
                                 }
                                 _ => {
                                     warn!("bad ipv6 address: {}", s)
@@ -469,7 +638,9 @@ fn extract_nvps(mut p: *const u8, size: i32) -> (Vec<NVP<'static>>, i32) {
 
             match nv.value {
                 Value::NvList(_) => {
-                    let (embedded_nvps, embedded_consumed) = extract_nvps(p, size - consumed);
+                    let (embedded_nvps, embedded_consumed) =
+                        extract_nvps(p, size - consumed);
+
                     nvps.push(NVP {
                         name: nv.name,
                         value: Value::NvList(embedded_nvps),
@@ -568,7 +739,8 @@ fn extract_nvp(nvp: *const NvPair) -> Result<NVP<'static>, String> {
     Ok(result)
 }
 
-pub fn ifname_to_addrobj(mut if_name: &str, addr_family: u16) -> Result<(String, String), String> {
+pub fn ifname_to_addrobj(mut if_name: &str, addr_family: u16)
+-> Result<(String, String), String> {
     let parts: Vec<&str> = if_name.split(':').collect();
     let num = match parts.len() {
         2 => match i32::from_str_radix(parts[1], 10) {

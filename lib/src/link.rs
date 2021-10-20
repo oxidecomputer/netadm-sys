@@ -7,6 +7,9 @@ use std::fs::File;
 use std::os::unix::io::AsRawFd;
 use std::str;
 use tracing::{debug, warn};
+use libc::{
+    ENOENT,
+};
 
 const DATALINK_ANY_MEDIATYPE: u64 = 0x01 << 32;
 
@@ -39,7 +42,6 @@ pub enum DlmgmtCmd {
     ZoneHalt = 142,
 }
 
-pub const ENOENT: u32 = 2;
 
 #[derive(Debug)]
 #[repr(C)]
@@ -137,7 +139,7 @@ pub(crate) fn get_links() -> Result<Vec<LinkInfo>, Error> {
         };
         let response: DlmgmtLinkRetval = door_call(f.as_raw_fd(), request);
 
-        if response.linkid == 0 || response.err == ENOENT {
+        if response.linkid == 0 || response.err == (ENOENT as u32) {
             break;
         }
         if response.err != 0 {
@@ -438,7 +440,7 @@ pub fn linkname_to_id(name: &String) -> Result<u32, Error> {
     let f = dlmgmt_door_fd()?;
 
     let response: DlmgmtLinkRetval = door_call(f.as_raw_fd(), request);
-    if response.err == crate::sys::ENOENT || response.linkid == 0 {
+    if response.err == (ENOENT as u32) || response.linkid == 0 {
         return Err(Error::NotFound(format!("link {} not found", name)));
     }
     if response.err != 0 {
