@@ -219,7 +219,6 @@ impl Default for IpmgmtDhcpCache {
     }
 }
 
-/*
 #[derive(Debug)]
 #[repr(C)]
 pub struct IpmgmtAddrArg {
@@ -228,7 +227,6 @@ pub struct IpmgmtAddrArg {
     pub objname: [c_char; IPADM_AOBJSIZ as usize],
     pub lnum: u32,
 }
-*/
 
 #[derive(Debug)]
 pub struct IpInfo {

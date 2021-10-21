@@ -635,7 +635,7 @@ pub(crate) fn delete_ipaddr(
         return Err(Error::Ipmgmtd(sys::err_string(resp.err)));
     }
 
-    // delete the address
+    // delete the address from kernel
     let mut ior: sys::lifreq = unsafe { std::mem::zeroed() };
     let mut i = 0;
     for c in resp.ifname {
@@ -689,7 +689,30 @@ pub(crate) fn delete_ipaddr(
         }
     }
 
-    unsafe{ close(sock) };
+    let mut ia: ip::IpmgmtAddrArg = unsafe{ std::mem::zeroed() };
+    ia.cmd = ip::IpmgmtCmd::ResetAddr;
+    ia.flags = sys::IPMGMT_ACTIVE;
+    ia.lnum = resp.lnum as u32;
+    for (i, c) in objname.as_ref().chars().enumerate() {
+        ia.objname[i] = c as i8;
+    }
+
+    // delete the address from ipmgmtd
+    unsafe {
+        let mut response: *mut ip::IpmgmtRval = malloc(std::mem::size_of::<
+            ip::IpmgmtRval,
+            >()) as *mut ip::IpmgmtRval;
+        let resp: *mut ip::IpmgmtRval = door_callp(f.as_raw_fd(), ia, &mut response);
+        if (*resp).err != 0 {
+            free(response as *mut c_void);
+            close(sock);
+            return Err(Error::Ipmgmtd(
+                    format!("reset address: {}", sys::err_string((*resp).err))
+            ));
+        }
+        free(response as *mut c_void);
+        close(sock);
+    }
 
     Ok(())
 
