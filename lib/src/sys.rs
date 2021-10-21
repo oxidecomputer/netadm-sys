@@ -892,3 +892,47 @@ pub const RTM_GETALL: u32 = 17;
 extern "C" {
     pub fn getpid() -> pid_t;
 }
+
+/* error codes */
+#[repr(C)]
+pub enum IpadmStatusT {
+        Success,            /* No error occurred */
+        Failure,            /* Generic failure */
+        Eauth,              /* Insufficient user authorizations */
+        Eperm,              /* Permission denied */
+        NoBufs,             /* No Buffer space available */
+        NoMemory,           /* Insufficient memory */
+        BadAddr,            /* Invalid address */
+        BadProtocol,        /* Wrong protocol family for operation */
+        DadFound,           /* Duplicate address detected */
+        Exists,             /* Already exists */
+        IfExists,           /* Interface already exists */
+        AddrobjExists,      /* Address object already exists */
+        AddrconfExists,     /* Addrconf already in progress */
+        Enxio,              /* Interface does not exist */
+        GrpNotEmpty,        /* IPMP Group non-empty on unplumb */
+        InvalidArg,         /* Invalid argument */
+        InvalidName,        /* Invalid name */
+        DlpiFailure,        /* Could not open DLPI link */
+        DladmFailure,       /* DLADM error encountered */
+        PropUnknown,        /* Unknown property */
+        Erange,             /* Value is outside the allowed range */
+        Esrch,              /* Value does not exist */
+        Eoverflow,          /* Number of values exceed the allowed limit*/
+        NotFound,           /* Object not found */
+        IfInuse,            /* Interface already in use */
+        AddrInuse,          /* Address alrelady in use */
+        BadHostname,        /* hostname maps to multiple IP addresses */
+        AddrNotavail,       /* Can't assign requested address */
+        AllAddrsNotEnabled, /* All addresses could not be enabled */
+        NdpdNotRunning,     /* in.ndpd not running */
+        DhcpStartError,     /* Cannot start dhcpagent */
+        DhcpIpcError,       /* Cannot communicate with dhcpagent */
+        DhcpIpcTimeout,     /* Communication with dhcpagent timed out */
+        TemporaryObj,       /* Permanent operation on temporary object */
+        IpcError,           /* Cannot communicate with ipmgmtd */
+        OpDisableObj,       /* Operation on disable object */
+        NotSup,             /* Operation not supported */
+        Ebade,              /* Invalid data exchange with ipmgmtd */
+        GzPerm              /* Operation not permitted on from-gz intf */
+}

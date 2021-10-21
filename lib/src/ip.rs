@@ -138,6 +138,7 @@ pub struct IpmgmtAobjopRval {
     pub ifname: [c_char; LIFNAMSIZ as usize],
     pub lnum: i32,
     pub family: u16,
+    pub flags: u32,
     pub atype: AddrType,
     pub atype_cache: IpmgmtAddrTypeCache,
 }
@@ -150,6 +151,7 @@ impl Default for IpmgmtAobjopRval {
             ifname: [0; LIFNAMSIZ as usize],
             lnum: 0,
             family: 0,
+            flags: 0,
             atype: AddrType::default(),
             atype_cache: IpmgmtAddrTypeCache::default(),
         }

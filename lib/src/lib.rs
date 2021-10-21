@@ -92,6 +92,13 @@ pub fn delete_ipaddr(
     crate::ioctl::delete_ipaddr(name)
 }
 
+pub fn ipaddr_exists(
+    name: impl AsRef<str>,
+) -> Result<bool, Error> {
+
+    crate::ioctl::ipaddr_exists(name)
+}
+
 
 #[derive(Copy, Clone, Debug)]
 #[repr(u32)]

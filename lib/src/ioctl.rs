@@ -21,8 +21,13 @@ use libc::{
     SOCK_DGRAM,
 };
 use crate::ip;
-use crate::{Error, IpPrefix};
-use crate::{IpInfo, IpState};
+use crate::{
+    IpInfo,
+    IpState,
+    LinkFlags,
+    Error,
+    IpPrefix,
+};
 use std::collections::BTreeMap;
 use std::ffi::CStr;
 use std::fs::File;
@@ -558,6 +563,50 @@ pub(crate) fn get_ipaddrs() -> Result<BTreeMap<String, Vec<IpInfo>>, Error> {
     Ok(result)
 }
 
+pub(crate) fn ipaddr_exists(
+    objname: impl AsRef<str>,
+) -> Result<bool, Error> {
+
+    let f = File::open("/etc/svc/volatile/ipadm/ipmgmt_door")?;
+
+    // get address info
+    let mut req: ip::IpmgmtAobjopArg = unsafe { std::mem::zeroed() };
+    req.cmd = ip::IpmgmtCmd::AobjName2Addrobj;
+    for (i, c) in objname.as_ref().chars().enumerate() {
+        req.objname[i] = c as i8;
+    }
+
+    let mut response: *mut ip::IpmgmtAobjopRval = unsafe {
+            malloc(std::mem::size_of::<ip::IpmgmtAobjopRval>())
+                as *mut ip::IpmgmtAobjopRval
+    };
+
+    let respp: *mut ip::IpmgmtAobjopRval = door_callp(
+        f.as_raw_fd(),
+        req,
+        &mut response,
+    );
+    let resp = unsafe { *respp };
+    if resp.err != 0 {
+        if resp.err == sys::IpadmStatusT::NotFound as i32 {
+            return Ok(false);
+        }
+        //TODO cast to enum and print that way, not correct to use errno
+        //return Err(Error::Ipmgmtd(sys::err_string(resp.err)));
+        return Ok(false);
+    }
+
+    if (resp.flags & LinkFlags::Active as u32) == 0 {
+        return Ok(false);
+    }
+
+
+    return Ok(true);
+
+}
+
+// TODO this is not completely deleting the address, a reference is still
+// hanging out in ipmgmtd, look to see what ipadm is doing here ....
 pub(crate) fn delete_ipaddr(
     objname: impl AsRef<str>,
 ) -> Result<(), Error> {
