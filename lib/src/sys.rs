@@ -17,23 +17,34 @@ use libc::{
     in6_addr,
 };
 
-pub type id_t = ::std::os::raw::c_int;
-pub type uint_t = ::std::os::raw::c_uint;
+use std::os::raw::{
+    c_int,
+    c_uint,
+    c_char,
+    c_ulong,
+    c_uchar,
+    c_ushort,
+    c_longlong,
+    c_ulonglong,
+};
+
+pub type id_t = c_int;
+pub type uint_t = c_uint;
 pub type zoneid_t = id_t;
-pub type caddr_t = *mut ::std::os::raw::c_char;
-pub type uchar_t = ::std::os::raw::c_uchar;
-pub type ushort_t = ::std::os::raw::c_ushort;
-pub type pid_t = ::std::os::raw::c_int;
-pub type kid_t = ::std::os::raw::c_int;
+pub type caddr_t = *mut c_char;
+pub type uchar_t = c_uchar;
+pub type ushort_t = c_ushort;
+pub type pid_t = c_int;
+pub type kid_t = c_int;
 pub type size_t = ulong_t;
-pub type longlong_t = ::std::os::raw::c_longlong;
+pub type longlong_t = c_longlong;
 pub type hrtime_t = longlong_t;
-pub type u_longlong_t = ::std::os::raw::c_ulonglong;
-pub type ulong_t = ::std::os::raw::c_ulong;
+pub type u_longlong_t = c_ulonglong;
+pub type ulong_t = c_ulong;
 
 pub const boolean_t_B_FALSE: boolean_t = 0;
 pub const boolean_t_B_TRUE: boolean_t = 1;
-pub type boolean_t = ::std::os::raw::c_uint;
+pub type boolean_t = c_uint;
 
 pub const MAXMACADDRLEN: u32 = 20;
 pub const MAXPATHLEN: u32 = 1024;
@@ -384,33 +395,66 @@ pub type dld_macaddrinfo_t = dld_macaddrinfo;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct rt_metrics {
-    pub rmx_locks: u32,
-    pub rmx_mtu: u32,
-    pub rmx_hopcount: u32,
-    pub rmx_expire: u32,
-    pub rmx_recvpipe: u32,
-    pub rmx_sendpipe: u32,
-    pub rmx_ssthresh: u32,
-    pub rmx_rtt: u32,
-    pub rmx_rttvar: u32,
-    pub rmx_pksent: u32,
+    pub locks: u32,     /* Kernel must leave  these  values alone */
+    pub mtu: u32,       /* MTU for this path */
+    pub hopcount: u32,  /* max hops expected */
+    pub expire: u32,    /* lifetime for route, e.g., redirect */
+    pub recvpipe: u32,  /* inbound delay-bandwidth  product */
+    pub sendpipe: u32,  /* outbound delay-bandwidth product */
+    pub ssthresh: u32,  /* outbound gateway buffer limit */
+    pub rtt: u32,       /* estimated round trip time */
+    pub rttvar: u32,    /* estimated rtt variance */
+    pub pksent: u32,    /* packets sent using this route */
 }
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct rt_msghdr {
-    pub rtm_msglen: ushort_t,
-    pub rtm_version: uchar_t,
-    pub rtm_type: uchar_t,
-    pub rtm_index: ushort_t,
-    pub rtm_flags: ::std::os::raw::c_int,
-    pub rtm_addrs: ::std::os::raw::c_int,
-    pub rtm_pid: pid_t,
-    pub rtm_seq: ::std::os::raw::c_int,
-    pub rtm_errno: ::std::os::raw::c_int,
-    pub rtm_use: ::std::os::raw::c_int,
-    pub rtm_inits: uint_t,
-    pub rtm_rmx: rt_metrics,
+    pub msglen: ushort_t,   /* to skip over non-understood messages */
+    pub version: uchar_t,   /* future binary compatibility */
+    pub typ: uchar_t,       /* message type */
+    pub index: ushort_t,    /* index for associated ifp */
+    pub flags: c_int,       /* flags,  incl  kern  &  message, e.g., DONE */
+    pub addrs: c_int,       /* bitmask identifying sockaddrs in msg */
+    pub pid: pid_t,         /* identify sender */
+    pub seq: c_int,         /* for sender to identify action */
+    pub errno: c_int,       /* why failed */
+    pub used: c_int,        /* from rtentry */
+    pub inits: uint_t,      /* which values we are initializing */
+    pub rmx: rt_metrics,    /* metrics themselves */
+}
+
+impl Default for rt_msghdr {
+
+        fn default() -> Self {
+            unsafe {
+                rt_msghdr {
+                    msglen: std::mem::size_of::<rt_msghdr>() as u16,
+                    version: RTM_VERSION as u8,
+                    typ: RTM_GETALL as u8,
+                    addrs: 0,
+                    pid: getpid(),
+                    seq: 1701,
+                    errno: 0,
+                    flags: 0,
+                    used: 0,
+                    inits: 0,
+                    index: 0,
+                    rmx: rt_metrics {
+                        locks: 0,
+                        mtu: 0,
+                        hopcount: 0,
+                        expire: 0,
+                        recvpipe: 0,
+                        sendpipe: 0,
+                        ssthresh: 0,
+                        rtt: 0,
+                        rttvar: 0,
+                        pksent: 0,
+                    },
+                }
+            }
+        }
 }
 
 impl Default for ipmgmt_aobjop_rval_t {
@@ -888,6 +932,16 @@ pub const RTM_IFINFO: u32 = 14;
 pub const RTM_CHGADDR: u32 = 15;
 pub const RTM_FREEADDR: u32 = 16;
 pub const RTM_GETALL: u32 = 17;
+
+pub const RTA_DST: u32 = 0x1;
+pub const RTA_GATEWAY: u32 = 0x2;
+pub const RTA_NETMASK: u32 = 0x4;
+pub const RTA_GENMASK: u32 = 0x8;
+pub const RTA_IFP: u32 = 0x10;
+pub const RTA_IFA: u32 = 0x20;
+pub const RTA_AUTHOR: u32 = 0x40;
+pub const RTA_BRD: u32 = 0x80;
+pub const RTA_SRC: u32 = 0x100;
 
 extern "C" {
     pub fn getpid() -> pid_t;

@@ -44,6 +44,8 @@ pub enum Error {
     AlreadyExists(String),
     #[error("nvpair: {0}")]
     NvPair(String),
+    #[error("encoding error: {0}")]
+    Route(#[from] route::Error),
 
 }
 
@@ -90,6 +92,22 @@ pub fn delete_ipaddr(
 ) -> Result<(), Error> {
 
     crate::ioctl::delete_ipaddr(name)
+}
+
+pub fn add_route(
+    destination: IpPrefix,
+    gateway: IpAddr,
+) -> Result<(), Error> {
+
+    Ok(crate::route::add_route(destination, gateway)?)
+}
+
+pub fn delete_route(
+    destination: IpPrefix,
+    gateway: IpAddr,
+) -> Result<(), Error> {
+
+    Ok(crate::route::delete_route(destination, gateway)?)
 }
 
 pub fn ipaddr_exists(

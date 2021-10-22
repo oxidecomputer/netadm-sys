@@ -8,6 +8,7 @@ use netadm_sys::{
     create_simnet_link,
     create_vnic_link,
     create_ipaddr,
+    add_route,
     get_ipaddrs,
     get_link,
     get_links,
@@ -104,6 +105,8 @@ enum CreateSubCommand {
     Vnic(CreateVnic),
     #[clap(about = "create an ip address")]
     Addr(CreateAddr),
+    #[clap(about = "create a route")]
+    Route(CreateRoute),
 }
 
 #[derive(Clap)]
@@ -112,6 +115,8 @@ enum DeleteSubCommand {
     Link(DeleteLink),
     #[clap(about = "delete an ip address")]
     Addr(DeleteAddr),
+    #[clap(about = "delete a route")]
+    Route(DeleteRoute),
 }
 
 #[derive(Clap)]
@@ -137,6 +142,24 @@ struct CreateAddr {
     name: String,
     #[clap(about = "address to create")]
     addr: IpPrefix,
+}
+
+#[derive(Clap)]
+#[clap(setting = AppSettings::ColoredHelp)]
+struct CreateRoute {
+    #[clap(about = "route destination")]
+    destination: IpPrefix,
+    #[clap(about = "route gateway")]
+    gateway: IpAddr,
+}
+
+#[derive(Clap)]
+#[clap(setting = AppSettings::ColoredHelp)]
+struct DeleteRoute {
+    #[clap(about = "route destination")]
+    destination: IpPrefix,
+    #[clap(about = "route gateway")]
+    gateway: IpAddr,
 }
 
 #[derive(Clap)]
@@ -204,6 +227,11 @@ fn main() {
                 Ok(()) => {}
                 Err(e) => error!("{}", e),
             },
+            CreateSubCommand::Route(ref route) => match create_route(
+                &opts, &c, &route) {
+                Ok(()) => {}
+                Err(e) => error!("{}", e),
+            },
         },
         SubCommand::Delete(ref d) => match d.subcmd {
             DeleteSubCommand::Link(ref lnk) => match delete_link(
@@ -213,6 +241,11 @@ fn main() {
             },
             DeleteSubCommand::Addr(ref addr) => match delete_addr(
                 &opts, &d, &addr) {
+                Ok(()) => {}
+                Err(e) => error!("{}", e),
+            },
+            DeleteSubCommand::Route(ref route) => match delete_route(
+                &opts, &d, &route) {
                 Ok(()) => {}
                 Err(e) => error!("{}", e),
             },
@@ -250,6 +283,18 @@ fn create_vnic(_opts: &Opts, _c: &Create, s: &CreateVnic) -> Result<()> {
 
 fn create_addr(_opts: &Opts, _c: &Create, c: &CreateAddr) -> Result<()> {
     create_ipaddr(&c.name, c.addr)?;
+    // should we print back?
+    Ok(())
+}
+
+fn create_route(_opts: &Opts, _c: &Create, c: &CreateRoute) -> Result<()> {
+    add_route(c.destination, c.gateway)?;
+    // should we print back?
+    Ok(())
+}
+
+fn delete_route(_opts: &Opts, _c: &Delete, c: &DeleteRoute) -> Result<()> {
+    netadm_sys::delete_route(c.destination, c.gateway)?;
     // should we print back?
     Ok(())
 }
