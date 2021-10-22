@@ -8,7 +8,9 @@ use crate::sys::{
 use libc::{
     close,
     read,
+    sockaddr,
     sockaddr_in,
+    sockaddr_in6,
     socket,
     write,
     AF_UNSPEC,
@@ -16,7 +18,7 @@ use libc::{
     SOCK_RAW,
 };
 use std::mem::size_of;
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::os::raw::c_void;
 use thiserror::Error;
 
@@ -90,23 +92,94 @@ pub fn get_routes() -> Result<Vec<Route>, Error> {
         let mut p = buf.as_mut_ptr();
 
         n = read(sfd, buf.as_mut_ptr() as *mut c_void, 10240);
-
         loop {
             let hdr = p as *mut rt_msghdr;
-            let dst = hdr.offset(1) as *mut sockaddr_in;
-            let gw = dst.offset(1) as *mut sockaddr_in;
-            let mask = gw.offset(1) as *mut sockaddr_in;
+            let dst = hdr.offset(1) as *mut sockaddr;
+            let gw = match (*dst).sa_family as i32 {
+                libc::AF_INET => {
+                    dst.offset(1) as *mut sockaddr
+                },
+                libc::AF_INET6 => {
+                    (dst as *mut sockaddr_in6).offset(1) as *mut sockaddr
+                },
+                _ => continue,
+            };
+            let mask = match (*dst).sa_family as i32 {
+                libc::AF_INET => {
+                    gw.offset(1) as *mut sockaddr
+                }
+                libc::AF_INET6 => {
+                    (gw as *mut sockaddr_in6).offset(1) as *mut sockaddr
+                },
+                _ => continue,
+            };
 
             result.push(Route {
-                dest: IpAddr::V4(Ipv4Addr::from(u32::from_be((*dst).sin_addr.s_addr))),
-                mask: u32::leading_ones(u32::from_be((*mask).sin_addr.s_addr)),
-                gw: IpAddr::V4(Ipv4Addr::from(u32::from_be((*gw).sin_addr.s_addr))),
+                dest: match (*dst).sa_family as i32 {
+                    libc::AF_INET => {
+                        let dst = dst as *mut sockaddr_in;
+                        IpAddr::V4(Ipv4Addr::from(
+                                u32::from_be((*dst).sin_addr.s_addr)))
+                    },
+                    libc::AF_INET6 => {
+                        let dst = dst as *mut sockaddr_in6;
+                        IpAddr::V6(Ipv6Addr::from(
+                                u128::from_be_bytes((*dst).sin6_addr.s6_addr)))
+                    },
+                    _ => {
+                        p = (p as *mut u8).offset((*hdr).rtm_msglen as isize);
+                        if p.offset_from(buf.as_mut_ptr()) >= n as isize {
+                            break;
+                        }
+                        continue;
+                    }
+                },
+                mask: match (*mask).sa_family as i32 {
+                    libc::AF_INET => {
+                        let mask = mask as *mut sockaddr_in;
+                        u32::leading_ones(u32::from_be((*mask).sin_addr.s_addr))
+                    }
+                    libc::AF_INET6 => {
+                        let mask = mask as *mut sockaddr_in6;
+                        u128::leading_ones(
+                            u128::from_be_bytes((*mask).sin6_addr.s6_addr))
+                    }
+                    _ => 0,
+                },
+                gw: match (*gw).sa_family as i32 {
+                    libc::AF_INET => {
+                        let gw = gw as *mut sockaddr_in;
+                        IpAddr::V4(Ipv4Addr::from(
+                                u32::from_be((*gw).sin_addr.s_addr)))
+                    },
+                    libc::AF_INET6 => {
+                        let gw = gw as *mut sockaddr_in6;
+                        IpAddr::V6(Ipv6Addr::from(
+                                u128::from_be_bytes((*gw).sin6_addr.s6_addr)))
+                    },
+                    _ => {
+                        match (*dst).sa_family as i32 {
+                            libc::AF_INET => IpAddr::V4(Ipv4Addr::new(0,0,0,0)),
+                            libc::AF_INET6 => IpAddr::V6(Ipv6Addr::new(
+                                    0,0,0,0,0,0,0,0,
+                            )),
+                            _ => {
+                                p = (p as *mut u8).offset((*hdr).rtm_msglen as isize);
+                                if p.offset_from(buf.as_mut_ptr()) >= n as isize {
+                                    break;
+                                }
+                                continue;
+                            }
+                        }
+                    }
+                },
             });
 
-            p = mask.offset(1) as *mut u8;
+            p = (p as *mut u8).offset((*hdr).rtm_msglen as isize);
             if p.offset_from(buf.as_mut_ptr()) >= n as isize {
                 break;
             }
+
         }
 
         close(sfd);
