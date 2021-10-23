@@ -44,7 +44,7 @@ pub enum Error {
     AlreadyExists(String),
     #[error("nvpair: {0}")]
     NvPair(String),
-    #[error("encoding error: {0}")]
+    #[error("route error: {0}")]
     Route(#[from] route::Error),
 
 }

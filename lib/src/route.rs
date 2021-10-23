@@ -206,8 +206,27 @@ fn mod_route(
             return Err(Error::SystemError(format!("socket: {}", sys::errno)));
         }
 
+        let mut msglen = size_of::<rt_msghdr>();
+        match destination {
+            IpPrefix::V4(_) => {
+                msglen += size_of::<sockaddr_in>()*2;
+            }
+            IpPrefix::V6(_) => {
+                msglen += size_of::<sockaddr_in6>()*2;
+            }
+        };
+        match gateway {
+            IpAddr::V4(_) => {
+                msglen += size_of::<sockaddr_in>();
+            }
+            IpAddr::V6(_) => {
+                msglen += size_of::<sockaddr_in6>();
+            }
+        };
+
         let mut req = rt_msghdr::default();
         req.typ = cmd;
+        req.msglen = (msglen as u16).to_be();
 
         // set bitmask identifying addresses in message
         req.addrs = (RTA_DST | RTA_GATEWAY | RTA_NETMASK) as i32;
