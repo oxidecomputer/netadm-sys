@@ -327,7 +327,7 @@ fn mod_route(
                     sin_family: AF_INET as u16,
                     sin_port: 0,
                     sin_addr: libc::in_addr{
-                        s_addr: mask.to_be(),
+                        s_addr: mask,
                     },
                     sin_zero: [0; 8],
                 };
