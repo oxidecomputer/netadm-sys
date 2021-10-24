@@ -226,10 +226,14 @@ fn mod_route(
 
         let mut req = rt_msghdr::default();
         req.typ = cmd;
-        req.msglen = (msglen as u16).to_be();
-
+        req.msglen = msglen as u16;
+        req.version = sys::RTM_VERSION as u8;
+        //req.index TODO?
+        req.flags = (sys::RTF_GATEWAY | sys::RTF_STATIC) as i32; //TODO more?
         // set bitmask identifying addresses in message
         req.addrs = (RTA_DST | RTA_GATEWAY | RTA_NETMASK) as i32;
+        req.pid = std::process::id() as i32;
+        req.seq = 47; //TODO
 
         let mut buf: Vec<u8> = Vec::new();
         buf.extend_from_slice(
@@ -245,7 +249,7 @@ fn mod_route(
                     sin_family: AF_INET as u16,
                     sin_port: 0,
                     sin_addr: libc::in_addr{
-                        s_addr: u32::from(p.addr),
+                        s_addr: u32::from(p.addr).to_be(),
                     },
                     sin_zero: [0; 8],
                 };
@@ -262,7 +266,7 @@ fn mod_route(
                     sin6_port: 0,
                     sin6_flowinfo: 0,
                     sin6_addr: libc::in6_addr{
-                        s6_addr: u128::from_le_bytes(p.addr.octets()).to_be_bytes(),
+                        s6_addr: p.addr.octets(),
                     },
                     sin6_scope_id: 0,
                     __sin6_src_id: 0,
@@ -282,7 +286,7 @@ fn mod_route(
                     sin_family: AF_INET as u16,
                     sin_port: 0,
                     sin_addr: libc::in_addr{
-                        s_addr: u32::from(a),
+                        s_addr: u32::from(a).to_be(),
                     },
                     sin_zero: [0; 8],
                 };
@@ -299,7 +303,7 @@ fn mod_route(
                     sin6_port: 0,
                     sin6_flowinfo: 0,
                     sin6_addr: libc::in6_addr{
-                        s6_addr: u128::from_le_bytes(a.octets()).to_be_bytes(),
+                        s6_addr: a.octets(),
                     },
                     sin6_scope_id: 0,
                     __sin6_src_id: 0,
@@ -344,7 +348,7 @@ fn mod_route(
                     sin6_port: 0,
                     sin6_flowinfo: 0,
                     sin6_addr: libc::in6_addr{
-                        s6_addr: mask.to_be_bytes(),
+                        s6_addr: mask.to_be().to_be_bytes(),
                     },
                     sin6_scope_id: 0,
                     __sin6_src_id: 0,
