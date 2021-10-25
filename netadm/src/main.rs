@@ -1,7 +1,7 @@
 // Copyright 2021 Oxide Computer Company
 
 use anyhow::{anyhow, Result};
-use clap::{AppSettings, Clap};
+use clap::{AppSettings, Parser};
 use colored::*;
 use netadm_sys::{
     self,
@@ -26,12 +26,11 @@ use tabwriter::TabWriter;
 use tracing::error;
 use tracing_subscriber::{self, EnvFilter};
 
-#[derive(Clap)]
+#[derive(Parser)]
 #[clap(
     version = "0.1",
     author = "Ryan Goodfellow <ryan.goodfellow@oxide.computer>"
 )]
-#[clap(setting = AppSettings::ColoredHelp)]
 #[clap(setting = AppSettings::InferSubcommands)]
 struct Opts {
     #[clap(short, long, parse(from_occurrences))]
@@ -41,7 +40,7 @@ struct Opts {
     subcmd: SubCommand,
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 enum SubCommand {
     #[clap(about = "show things")]
     Show(Show),
@@ -53,32 +52,28 @@ enum SubCommand {
     Connect(SimnetConnect),
 }
 
-#[derive(Clap)]
-#[clap(setting = AppSettings::ColoredHelp)]
+#[derive(Parser)]
 #[clap(setting = AppSettings::InferSubcommands)]
 struct Show {
     #[clap(subcommand)]
     subcmd: ShowSubCommand,
 }
 
-#[derive(Clap)]
-#[clap(setting = AppSettings::ColoredHelp)]
+#[derive(Parser)]
 #[clap(setting = AppSettings::InferSubcommands)]
 struct Create {
     #[clap(subcommand)]
     subcmd: CreateSubCommand,
 }
 
-#[derive(Clap)]
-#[clap(setting = AppSettings::ColoredHelp)]
+#[derive(Parser)]
 #[clap(setting = AppSettings::InferSubcommands)]
 struct Delete {
     #[clap(subcommand)]
     subcmd: DeleteSubCommand,
 }
 
-#[derive(Clap)]
-#[clap(setting = AppSettings::ColoredHelp)]
+#[derive(Parser)]
 #[clap(setting = AppSettings::InferSubcommands)]
 struct SimnetConnect {
     #[clap(about = "simnet link-id or name")]
@@ -87,7 +82,7 @@ struct SimnetConnect {
     sim_b: LinkHandle,
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 enum ShowSubCommand {
     #[clap(about = "show link-layer interfaces")]
     Links(ShowLinks),
@@ -97,7 +92,7 @@ enum ShowSubCommand {
     Routes(ShowRoutes),
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 enum CreateSubCommand {
     #[clap(about = "create a simnet interface")]
     Simnet(CreateSimnet),
@@ -109,7 +104,7 @@ enum CreateSubCommand {
     Route(CreateRoute),
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 enum DeleteSubCommand {
     #[clap(about = "delete a link-layer interface")]
     Link(DeleteLink),
@@ -119,15 +114,13 @@ enum DeleteSubCommand {
     Route(DeleteRoute),
 }
 
-#[derive(Clap)]
-#[clap(setting = AppSettings::ColoredHelp)]
+#[derive(Parser)]
 struct CreateSimnet {
     #[clap(about = "name for the new link")]
     name: String,
 }
 
-#[derive(Clap)]
-#[clap(setting = AppSettings::ColoredHelp)]
+#[derive(Parser)]
 struct CreateVnic {
     #[clap(about = "name for the new link")]
     name: String,
@@ -135,8 +128,7 @@ struct CreateVnic {
     link: LinkHandle,
 }
 
-#[derive(Clap)]
-#[clap(setting = AppSettings::ColoredHelp)]
+#[derive(Parser)]
 struct CreateAddr {
     #[clap(about = "name for the new address")]
     name: String,
@@ -144,8 +136,7 @@ struct CreateAddr {
     addr: IpPrefix,
 }
 
-#[derive(Clap)]
-#[clap(setting = AppSettings::ColoredHelp)]
+#[derive(Parser)]
 struct CreateRoute {
     #[clap(about = "route destination")]
     destination: IpPrefix,
@@ -153,8 +144,7 @@ struct CreateRoute {
     gateway: IpAddr,
 }
 
-#[derive(Clap)]
-#[clap(setting = AppSettings::ColoredHelp)]
+#[derive(Parser)]
 struct DeleteRoute {
     #[clap(about = "route destination")]
     destination: IpPrefix,
@@ -162,30 +152,25 @@ struct DeleteRoute {
     gateway: IpAddr,
 }
 
-#[derive(Clap)]
-#[clap(setting = AppSettings::ColoredHelp)]
+#[derive(Parser)]
 struct DeleteLink {
     #[clap(about = "link-id or name")]
     handle: LinkHandle,
 }
 
-#[derive(Clap)]
-#[clap(setting = AppSettings::ColoredHelp)]
+#[derive(Parser)]
 struct DeleteAddr {
     #[clap(about = "address name")]
     name: String,
 }
 
-#[derive(Clap)]
-#[clap(setting = AppSettings::ColoredHelp)]
+#[derive(Parser)]
 struct ShowLinks {}
 
-#[derive(Clap)]
-#[clap(setting = AppSettings::ColoredHelp)]
+#[derive(Parser)]
 struct ShowAddrs {}
 
-#[derive(Clap)]
-#[clap(setting = AppSettings::ColoredHelp)]
+#[derive(Parser)]
 struct ShowRoutes {}
 
 fn main() {
