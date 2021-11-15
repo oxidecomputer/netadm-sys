@@ -262,7 +262,7 @@ dependencies = [
 [[package]]
 name = "nvpair"
 version = "0.5.0"
-source = "git+ssh://git@github.com/jmesmon/rust-libzfs?branch=master#57cd26405a82e9c06bebd8808ad36051c8ff411c"
+source = "git+https://github.com/jmesmon/rust-libzfs?branch=master#1d6bc9e400d96c2c41049b27ff33283dea0fa5d0"
 dependencies = [
  "cstr-argument",
  "foreign-types",
@@ -272,7 +272,7 @@ dependencies = [
 [[package]]
 name = "nvpair-sys"
 version = "0.4.0"
-source = "git+ssh://git@github.com/jmesmon/rust-libzfs?branch=master#57cd26405a82e9c06bebd8808ad36051c8ff411c"
+source = "git+https://github.com/jmesmon/rust-libzfs?branch=master#1d6bc9e400d96c2c41049b27ff33283dea0fa5d0"
 
 [[package]]
 name = "once_cell"

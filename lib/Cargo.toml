@@ -12,7 +12,7 @@ libc = "0.2"
 anyhow = "1.0"
 
 # need https://github.com/jmesmon/rust-libzfs/commit/2bf2a5b1 for i32 type
-nvpair = { git = "ssh://git@github.com/jmesmon/rust-libzfs", branch = "master" }
+nvpair = { git = "https://github.com/jmesmon/rust-libzfs", branch = "master" }
 #nvpair = "0.5"
-nvpair-sys = { git = "ssh://git@github.com/jmesmon/rust-libzfs", branch = "master" }
+nvpair-sys = { git = "https://github.com/jmesmon/rust-libzfs", branch = "master" }
 #nvpair-sys = "0.4"
