@@ -13,7 +13,6 @@ fn get_links() -> Result<()> {
 #[test]
 fn link_consistency() -> Result<()> {
 
-    // just making sure it runs without error
     let links = crate::get_links()?;
 
     for link in links {
