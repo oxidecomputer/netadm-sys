@@ -118,7 +118,7 @@ pub fn ipaddr_exists(
 }
 
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 #[repr(u32)]
 pub enum LinkFlags {
     Active = 0x1,
@@ -141,7 +141,7 @@ impl Display for LinkFlags {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 #[repr(C)]
 pub enum LinkClass {
     Phys = 0x01,
@@ -173,7 +173,7 @@ impl Display for LinkClass {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum LinkState {
     Unknown,
     Down,
@@ -196,6 +196,7 @@ impl Display for LinkState {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct LinkInfo {
     pub id: u32,
     pub name: String,
@@ -356,3 +357,6 @@ impl FromStr for Ipv4Prefix {
 
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -9,6 +9,7 @@ rusty-doors = { git = "ssh://git@github.com/oxidecomputer/rusty-doors" }
 tracing = "0.1"
 thiserror = "1"
 libc = "0.2"
+anyhow = "1.0"
 
 # need https://github.com/jmesmon/rust-libzfs/commit/2bf2a5b1 for i32 type
 nvpair = { git = "ssh://git@github.com/jmesmon/rust-libzfs", branch = "master" }
