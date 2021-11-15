@@ -5,8 +5,8 @@
 #: target = "helios"
 #: rust_toolchain = "nightly-2021-09-03"
 #: output_rules = [
-#:   "target/debug/devadm",
-#:   "target/release/devadm",
+#:   "target/debug/netadm",
+#:   "target/release/netadm",
 #: ]
 #:
 
