@@ -184,6 +184,26 @@ pub fn add_route(
 
 }
 
+pub fn ensure_route_present(
+    destination: IpPrefix,
+    gateway: IpAddr,
+) -> Result<(), Error> {
+
+    match add_route(destination, gateway) {
+        Ok(_) => Ok(()),
+        Err(Error::SystemError(msg)) => {
+            //TODO this is terrible, include error codes in wrapped errors
+            if msg.contains("exists") {
+                Ok(())
+            } else {
+                Err(Error::SystemError(msg))
+            }
+        }
+        Err(e) =>  Err(e),
+    }
+
+}
+
 pub fn delete_route(
     destination: IpPrefix,
     gateway: IpAddr,

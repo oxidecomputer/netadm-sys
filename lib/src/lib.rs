@@ -49,75 +49,9 @@ pub enum Error {
 
 }
 
-#[derive(Debug)]
-#[repr(i32)]
-pub enum IpState {
-    Disabled = 0,
-    Duplicate = 1,
-    Down = 2,
-    Tentative = 3,
-    OK = 4,
-    Inaccessible = 5,
-}
+// Datalink management --------------------------------------------------------
 
-pub struct IpInfo {
-    pub ifname: String,
-    pub index: i32,
-    pub addr: IpAddr,
-    pub mask: u32,
-    pub family: u16,
-    pub state: IpState,
-}
-
-pub fn get_ipaddrs() -> Result<BTreeMap<String, Vec<IpInfo>>, Error> {
-    let addrs = crate::ioctl::get_ipaddrs();
-
-    // TODO incorporate more persistent address information from here
-    //let paddrs = crate::ip::get_persistent_ipinfo()
-    //  .map_err(|e| anyhow!("{}", e))?;
-
-    addrs
-}
-
-pub fn create_ipaddr(
-    name: impl AsRef<str>,
-    addr: IpPrefix,
-) -> Result<(), Error> {
-
-    crate::ioctl::create_ipaddr(name, addr)
-}
-
-pub fn delete_ipaddr(
-    name: impl AsRef<str>,
-) -> Result<(), Error> {
-
-    crate::ioctl::delete_ipaddr(name)
-}
-
-pub fn add_route(
-    destination: IpPrefix,
-    gateway: IpAddr,
-) -> Result<(), Error> {
-
-    Ok(crate::route::add_route(destination, gateway)?)
-}
-
-pub fn delete_route(
-    destination: IpPrefix,
-    gateway: IpAddr,
-) -> Result<(), Error> {
-
-    Ok(crate::route::delete_route(destination, gateway)?)
-}
-
-pub fn ipaddr_exists(
-    name: impl AsRef<str>,
-) -> Result<bool, Error> {
-
-    crate::ioctl::ipaddr_exists(name)
-}
-
-
+/// Link flags specifiy if a link is active, persistent, or both.
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[repr(u32)]
 pub enum LinkFlags {
@@ -141,6 +75,7 @@ impl Display for LinkFlags {
     }
 }
 
+/// Link class specifies the type of datalink.
 #[derive(Debug, PartialEq)]
 #[repr(C)]
 pub enum LinkClass {
@@ -173,6 +108,7 @@ impl Display for LinkClass {
     }
 }
 
+/// Link state indicates the carrier status of the link.
 #[derive(Debug, PartialEq)]
 pub enum LinkState {
     Unknown,
@@ -196,6 +132,7 @@ impl Display for LinkState {
     }
 }
 
+/// Information about a datalink.
 #[derive(Debug, PartialEq)]
 pub struct LinkInfo {
     pub id: u32,
@@ -207,6 +144,7 @@ pub struct LinkInfo {
     pub over: u32,
 }
 
+/// A link handle can be either a string or a numeric id.
 #[derive(Debug, Clone)]
 pub enum LinkHandle {
     Id(u32),
@@ -233,23 +171,34 @@ impl FromStr for LinkHandle {
     }
 }
 
+/// Get a vector of all Layer-2 links present on the system.
 pub fn get_links() -> Result<Vec<LinkInfo>, Error> {
     crate::link::get_links()
 }
 
+/// Get a datalink with the given `id`.
 pub fn get_link(id: u32) -> Result<LinkInfo, Error> {
     crate::link::get_link(id)
 }
 
+/// Given a datalink name, return it's numeric id.
 pub fn linkname_to_id(name: &String) -> Result<u32, Error> {
     crate::link::linkname_to_id(name)
 }
 
+/// Create a simnet link.
+///
+/// Simnet links are used in paris. When a pair of simnet links is created,
+/// whaterver ingreses into one flows to the other.
 pub fn create_simnet_link(name: &String, flags: LinkFlags) -> Result<LinkInfo, Error> {
     debug!("creating simnet link {}", name);
     crate::link::create_simnet_link(name, flags)
 }
 
+/// Create a virtual NIC link.
+///
+/// Virtual NICs are devices that are attached to another device. Packets that
+/// ingress the attached device also ingress the VNIC and vice versa.
 pub fn create_vnic_link(
     name: &String,
     link: &LinkHandle,
@@ -258,6 +207,7 @@ pub fn create_vnic_link(
     crate::link::create_vnic_link(name, link.id()?, flags)
 }
 
+/// Delete a data link identified by `handle`.
 pub fn delete_link(handle: &LinkHandle, flags: LinkFlags) -> Result<(), Error> {
     let id = match handle.id() {
         Err(Error::NotFound(_)) => return Ok(()),
@@ -268,6 +218,9 @@ pub fn delete_link(handle: &LinkHandle, flags: LinkFlags) -> Result<(), Error> {
     crate::link::delete_link(id, flags)
 }
 
+/// Connect two simnet peers.
+///
+/// This means packets that ingress `a` will egress `a` to `b` and vice versa.
 pub fn connect_simnet_peers(a: &LinkHandle, b: &LinkHandle) -> Result<(), Error> {
     let a_id = a.id()?;
     let b_id = b.id()?;
@@ -279,6 +232,111 @@ pub fn connect_simnet_peers(a: &LinkHandle, b: &LinkHandle) -> Result<(), Error>
     */
 }
 
+// IP address management ------------------------------------------------------
+
+/// The state of an IP address in the kernel.
+#[derive(Debug)]
+#[repr(i32)]
+pub enum IpState {
+    Disabled = 0,
+    Duplicate = 1,
+    Down = 2,
+    Tentative = 3,
+    OK = 4,
+    Inaccessible = 5,
+}
+
+/// Information in the kernel about an IP address.
+pub struct IpInfo {
+    pub ifname: String,
+    pub index: i32,
+    pub addr: IpAddr,
+    pub mask: u32,
+    pub family: u16,
+    pub state: IpState,
+}
+
+/// Get a list of all IP addresses on the system.
+pub fn get_ipaddrs() -> Result<BTreeMap<String, Vec<IpInfo>>, Error> {
+    let addrs = crate::ioctl::get_ipaddrs();
+
+    // TODO incorporate more persistent address information from here
+    //let paddrs = crate::ip::get_persistent_ipinfo()
+    //  .map_err(|e| anyhow!("{}", e))?;
+
+    addrs
+}
+
+/// Create an IP address and give it the provided address object name.
+///
+/// Standard convention is to use a name of the form
+/// `<datalink-name>/<interface-name>`.
+pub fn create_ipaddr(
+    name: impl AsRef<str>,
+    addr: IpPrefix,
+) -> Result<(), Error> {
+
+    crate::ioctl::create_ipaddr(name, addr)
+}
+
+/// Delete an IP address with the given address object name.
+pub fn delete_ipaddr(
+    name: impl AsRef<str>,
+) -> Result<(), Error> {
+
+    crate::ioctl::delete_ipaddr(name)
+}
+
+/// Check if an IP address with the given address object name exists.
+pub fn ipaddr_exists(
+    name: impl AsRef<str>,
+) -> Result<bool, Error> {
+
+    crate::ioctl::ipaddr_exists(name)
+}
+
+// Route management -----------------------------------------------------------
+
+/// Get all routes present on the system.
+pub fn get_routes() -> Result<Vec<crate::route::Route>, Error> {
+
+    Ok(crate::route::get_routes()?)
+
+}
+
+/// Add a route to `destination` via `gateway`.
+pub fn add_route(
+    destination: IpPrefix,
+    gateway: IpAddr,
+) -> Result<(), Error> {
+
+    Ok(crate::route::add_route(destination, gateway)?)
+}
+
+/// Ensure a route to `destination` via `gateway` is present.
+///
+/// Same as `add_route` except no error is returned if the route already exists
+/// on the system.
+pub fn ensure_route_present(
+    destination: IpPrefix,
+    gateway: IpAddr,
+) -> Result<(), Error> {
+
+    Ok(crate::route::ensure_route_present(destination, gateway)?)
+}
+
+/// Delete a route to `destination` via `gateway`.
+pub fn delete_route(
+    destination: IpPrefix,
+    gateway: IpAddr,
+) -> Result<(), Error> {
+
+    Ok(crate::route::delete_route(destination, gateway)?)
+}
+
+
+/// An IP prefix is the leading bits of an IP address combined with a prefix
+/// length indicating the number of leading bits that are significant.
 #[derive(Debug, Clone, Copy)]
 pub enum IpPrefix {
     V4(Ipv4Prefix),
@@ -298,18 +356,23 @@ impl FromStr for IpPrefix {
     }
 }
 
+/// An IPv6 address with a mask to indicate how many leading bits are
+/// significant.
 #[derive(Debug, Clone, Copy)]
 pub struct Ipv6Prefix {
     pub addr: Ipv6Addr,
     pub mask: u8,
 }
 
+/// An IPv4 address with a mask to indicate how many leading bits are
+/// significant.
 #[derive(Debug, Clone, Copy)]
 pub struct Ipv4Prefix {
     pub addr: Ipv4Addr,
     pub mask: u8,
 }
 
+/// An error that inddicates what went wrong with parsing an IP prefix.
 #[derive(Debug, Error)]
 pub enum IpPrefixParseError {
     #[error("expected CIDR representation <addr>/<mask")]
