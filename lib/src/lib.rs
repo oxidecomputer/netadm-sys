@@ -49,6 +49,13 @@ pub enum Error {
 
 }
 
+impl Into<std::io::Error> for Error {
+    fn into(self) -> std::io::Error {
+        std::io::Error::new(std::io::ErrorKind::Other, 
+            self.to_string())
+    }
+}
+
 // Datalink management --------------------------------------------------------
 
 /// Link flags specifiy if a link is active, persistent, or both.
@@ -266,6 +273,9 @@ pub fn get_ipaddrs() -> Result<BTreeMap<String, Vec<IpInfo>>, Error> {
 
     addrs
 }
+
+/// Get information about a specific IP interface
+pub use crate::ioctl::get_ipaddr_info;
 
 /// Create an IP address and give it the provided address object name.
 ///

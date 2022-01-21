@@ -739,6 +739,7 @@ fn extract_nvp(nvp: *const NvPair) -> Result<NVP<'static>, String> {
     Ok(result)
 }
 
+//TODO this interface should return all information contained in addrobj_rtal_t
 pub fn ifname_to_addrobj(mut if_name: &str, addr_family: u16)
 -> Result<(String, String), String> {
     let parts: Vec<&str> = if_name.split(':').collect();
@@ -789,4 +790,47 @@ pub fn ifname_to_addrobj(mut if_name: &str, addr_family: u16)
     };
 
     Ok((objname, source.to_string()))
+}
+
+//TODO this interface should return all information contained in addrobj_rtal_t
+//      in a sane way e.g. not a tuple
+pub fn addrobjname_to_addrobj(aobj_name: &str)
+-> Result<(String, String, u16, String, i32), String> {
+
+
+    let mut request = crate::sys::ipmgmt_aobjop_arg_t {
+        ia_cmd: crate::sys::ipmgmt_door_cmd_type_t_IPMGMT_CMD_AOBJNAME2ADDROBJ,
+        ia_flags: 0,
+        ia_aobjname: [0; 64usize],
+        ia_ifname: [0; 32usize],
+        ia_lnum: 0,
+        ia_family: 0,
+        ia_atype: crate::sys::ipadm_addr_type_t_IPADM_ADDR_NONE,
+    };
+    for (i, _) in aobj_name.chars().enumerate() {
+        request.ia_aobjname[i] = aobj_name.as_bytes()[i] as std::os::raw::c_char;
+    }
+
+    let f = File::open("/etc/svc/volatile/ipadm/ipmgmt_door")
+        .map_err(|e| format!("door open: {}", e))?;
+
+    let resp: crate::sys::ipmgmt_aobjop_rval_t = door_call(f.as_raw_fd(), request);
+
+    let ifname = unsafe {
+        CStr::from_ptr(resp.ir_ifname.as_ptr())
+            .to_str()
+            .map_err(|e| format!("abojname cstr to str: {}", e))?
+            .to_string()
+    };
+
+    let source = match resp.ir_atype {
+        crate::sys::ipadm_addr_type_t_IPADM_ADDR_NONE => "none",
+        crate::sys::ipadm_addr_type_t_IPADM_ADDR_STATIC => "static",
+        crate::sys::ipadm_addr_type_t_IPADM_ADDR_IPV6_ADDRCONF => "addrconf",
+        crate::sys::ipadm_addr_type_t_IPADM_ADDR_DHCP => "dhcp",
+        _ => "?",
+    };
+
+    Ok((aobj_name.to_string(), source.to_string(), resp.ir_family, ifname, resp.ir_lnum))
+
 }

@@ -16,3 +16,5 @@ nvpair = { git = "https://github.com/jmesmon/rust-libzfs", branch = "master" }
 #nvpair = "0.5"
 nvpair-sys = { git = "https://github.com/jmesmon/rust-libzfs", branch = "master" }
 #nvpair-sys = "0.4"
+
+dlpi  = { path = "/home/ry/src/dlpi-sys" }

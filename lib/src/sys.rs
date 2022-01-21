@@ -1,6 +1,5 @@
 // Copyright 2021 Oxide Computer Company
 
-
 // import generated bindings
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
@@ -71,6 +70,16 @@ pub const IOC_OUT: u32 = 0x40000000;
 pub const IOC_IN: u32 = 0x80000000;
 pub const IOC_INOUT: u32 = IOC_OUT | IOC_IN;
 
+pub const STR: i32 = ('S' as i32)<<8;
+pub const I_PUSH: i32 =  STR | 0o2;
+pub const I_POP: i32 =  STR | 0o3;
+pub const I_PLINK: i32 =  STR | 0o26;
+pub const I_PUNLINK: i32 =  STR | 0o27;
+pub const I_STR: i32 =  STR | 0o10;
+
+pub const IP_MOD_NAME: &[u8;3] = b"ip\0";
+pub const ARP_MOD_NAME: &[u8;4] = b"arp\0";
+
 pub type nvlist_t = nvlist;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -137,6 +146,17 @@ pub struct lifreq {
     pub lifr_lifru1: lifreq_ru1,
     pub lifr_type: uint_t,
     pub lifr_lifru: lifreq_ru,
+}
+
+impl lifreq {
+    pub fn new() -> Self {
+        lifreq {
+            lifr_name: [0; 32usize],
+            lifr_lifru1: lifreq_ru1 { lifru_ppa: 0 },
+            lifr_type: 0,
+            lifr_lifru: lifreq_ru { lifru_flags: 0 },
+        }
+    }
 }
 
 impl Default for lifreq {
@@ -216,6 +236,28 @@ pub struct lif_nd_req {
     pub lnr_hdw_addr: [::std::os::raw::c_char; 64usize],
 }
 
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct strioctl {
+    pub ic_cmd: c_int,
+    pub ic_timeout: c_int,
+    pub ic_len: c_int,
+    pub ic_dp: *mut c_char,
+}
+
+impl strioctl {
+    pub fn new() -> Self {
+        strioctl {
+            ic_cmd: 0,
+            ic_timeout: 0,
+            ic_len: 0,
+            ic_dp: std::ptr::null_mut::<c_char>(),
+        }
+    }
+}
+
+pub const LIFNAMSIZ: usize = 32;
+
 pub const DLDIOC_MACADDRGET: i32 =  DLDIOC!(0x15);
 pub const SIOCLIFREMOVEIF: i32 =    IOW!('i',   110, lifreq) as i32;
 pub const SIOCLIFADDIF: i32 =       IOWR!('i',  111, lifreq) as i32;
@@ -224,6 +266,7 @@ pub const SIOCSLIFFLAGS: i32 =      IOW!('i',   116, lifreq) as i32;
 pub const SIOCGLIFFLAGS: i32 =      IOWR!('i',  117, lifreq) as i32;
 pub const SIOCGLIFNETMASK: i32 =    IOWR!('i',  125, lifreq) as i32;
 pub const SIOCSLIFNETMASK: i32 =    IOW!('i',   126, lifreq) as i32;
+pub const SIOCSLIFNAME: i32 =       IOWR!('i',  129, lifreq) as i32;
 pub const SIOCGLIFNUM: i32 =        IOWR!('i',  130, lifnum) as i32;
 pub const SIOCGLIFINDEX: i32 =      IOWR!('i',  133, lifreq) as i32;
 pub const SIOCGLIFCONF: i32 =       IOWRN!('i', 165, 16) as i32;
@@ -1013,3 +1056,4 @@ pub enum IpadmStatusT {
         Ebade,              /* Invalid data exchange with ipmgmtd */
         GzPerm              /* Operation not permitted on from-gz intf */
 }
+

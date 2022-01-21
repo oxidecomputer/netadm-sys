@@ -10,6 +10,7 @@ use netadm_sys::{
     create_ipaddr,
     add_route,
     get_ipaddrs,
+    get_ipaddr_info,
     get_link,
     get_links,
     ip,
@@ -168,7 +169,10 @@ struct DeleteAddr {
 struct ShowLinks {}
 
 #[derive(Parser)]
-struct ShowAddrs {}
+struct ShowAddrs {
+    #[clap(short, long, about = "restrict to the provided interface name")]
+    name: Option<String>,
+}
 
 #[derive(Parser)]
 struct ShowRoutes {}
@@ -336,7 +340,7 @@ fn show_links(_opts: &Opts, _s: &Show, _l: &ShowLinks) -> Result<()> {
     Ok(())
 }
 
-fn show_addrs(_opts: &Opts, _s: &Show, _a: &ShowAddrs) -> Result<()> {
+fn show_addrs(_opts: &Opts, _s: &Show, a: &ShowAddrs) -> Result<()> {
     let mut tw = TabWriter::new(stdout());
     write!(
         &mut tw,
@@ -356,6 +360,31 @@ fn show_addrs(_opts: &Opts, _s: &Show, _a: &ShowAddrs) -> Result<()> {
         "----".bright_black(),
         "---------------".bright_black(),
     )?;
+
+    if a.name.is_some() {
+
+        let name = a.name.as_ref().unwrap();
+
+        let addr = get_ipaddr_info(name)
+            .map_err(|e| anyhow!("{}", e))?;
+
+        let (addrobj, src, _, _, _) = ip::addrobjname_to_addrobj(name)
+            .map_err(|e| anyhow!("{}", e))?;
+        write!(
+            &mut tw,
+            "{}\t{}\t{}\t{}/{}\t{}\n",
+            addrobj,
+            src,
+            color_state(&addr.state),
+            color_ip(addr.addr),
+            addr.mask,
+            addr.index,
+        )?;
+        tw.flush()?;
+
+        return Ok(())
+
+    }
 
     let addrs = get_ipaddrs()?;
 
