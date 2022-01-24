@@ -262,6 +262,7 @@ pub const DLDIOC_MACADDRGET: i32 =  DLDIOC!(0x15);
 pub const SIOCLIFREMOVEIF: i32 =    IOW!('i',   110, lifreq) as i32;
 pub const SIOCLIFADDIF: i32 =       IOWR!('i',  111, lifreq) as i32;
 pub const SIOCSLIFADDR: i32 =       IOW!('i',   112, lifreq) as i32;
+pub const SIOCGLIFADDR: i32 =       IOWR!('i',  113, lifreq) as i32;
 pub const SIOCSLIFFLAGS: i32 =      IOW!('i',   116, lifreq) as i32;
 pub const SIOCGLIFFLAGS: i32 =      IOWR!('i',  117, lifreq) as i32;
 pub const SIOCGLIFNETMASK: i32 =    IOWR!('i',  125, lifreq) as i32;

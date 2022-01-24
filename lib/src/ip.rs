@@ -755,8 +755,8 @@ pub fn ifname_to_addrobj(mut if_name: &str, addr_family: u16)
     };
 
     let mut ia_ifname = [0; 32usize];
-    for (i, _) in if_name.chars().enumerate() {
-        ia_ifname[i] = if_name.as_bytes()[i] as std::os::raw::c_char;
+    for (i, c) in if_name.chars().enumerate() {
+        ia_ifname[i] = c as std::os::raw::c_char;
     }
 
     let request = crate::sys::ipmgmt_aobjop_arg_t {
@@ -807,8 +807,8 @@ pub fn addrobjname_to_addrobj(aobj_name: &str)
         ia_family: 0,
         ia_atype: crate::sys::ipadm_addr_type_t_IPADM_ADDR_NONE,
     };
-    for (i, _) in aobj_name.chars().enumerate() {
-        request.ia_aobjname[i] = aobj_name.as_bytes()[i] as std::os::raw::c_char;
+    for (i, c) in aobj_name.chars().enumerate() {
+        request.ia_aobjname[i] = c as std::os::raw::c_char;
     }
 
     let f = File::open("/etc/svc/volatile/ipadm/ipmgmt_door")

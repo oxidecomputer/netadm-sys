@@ -890,6 +890,7 @@ pub fn get_ipaddr_info(name: &str) -> Result<IpInfo, Error> {
 
     unsafe {
 
+
         let (_, _, af, ifname, _) = crate::ip::addrobjname_to_addrobj(name)
             .map_err(|e| Error::Ioctl(
                     format!("get addrobj: {}", e.to_string())))?;
@@ -904,9 +905,10 @@ pub fn get_ipaddr_info(name: &str) -> Result<IpInfo, Error> {
             return Err(Error::Ioctl("socket 6".to_string()));
         }
 
+
         let ss = match af as i32 {
-            AF_INET => s4,
-            AF_INET6 => s6,
+            libc::AF_INET => s4,
+            libc::AF_INET6 => s6,
             _ => return Err(Error::Ioctl(
                     format!("unknown address family: {}", af))),
         };
@@ -916,6 +918,15 @@ pub fn get_ipaddr_info(name: &str) -> Result<IpInfo, Error> {
             req.lifr_name[i] = c as i8;
         }
 
+        // get addr
+        let ret = ioctl(ss, sys::SIOCGLIFADDR, &req);
+        if ret != 0 {
+            close(s4);
+            close(s6);
+            return Err(Error::Ioctl("ioctl SIOCGLIFINDEX".to_string()));
+        }
+
+        /*
         let lifc = sys::lifconf {
             lifc_family: af as u16,
             lifc_flags: (sys::LIFC_NOXMIT
@@ -934,6 +945,7 @@ pub fn get_ipaddr_info(name: &str) -> Result<IpInfo, Error> {
             close(s6);
             return Err(Error::Ioctl("ioctl SIOCGLIFCONF".to_string()));
         }
+        */
 
 
         ipaddr_info(&req, s4, s6)
