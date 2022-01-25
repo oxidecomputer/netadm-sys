@@ -272,6 +272,7 @@ pub const SIOCGLIFNUM: i32 =        IOWR!('i',  130, lifnum) as i32;
 pub const SIOCGLIFINDEX: i32 =      IOWR!('i',  133, lifreq) as i32;
 pub const SIOCGLIFCONF: i32 =       IOWRN!('i', 165, 16) as i32;
 pub const SIOCGLIFDADSTATE: i32 =   IOWR!('i',  190, lifreq) as i32;
+pub const SIOCSLIFPREFIX: i32 =     IOWR!('i',  191, lifreq) as i32;
 
 //#define	SIMNETIOC(cmdid)	DLD_IOC_CMD(SIMNET_IOC, (cmdid))
 macro_rules! SIMNETIOC {

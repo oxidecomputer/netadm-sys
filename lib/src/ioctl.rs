@@ -605,7 +605,10 @@ pub(crate) fn delete_ipaddr(
         let mut response: *mut ip::IpmgmtRval = malloc(std::mem::size_of::<
             ip::IpmgmtRval,
             >()) as *mut ip::IpmgmtRval;
-        let resp: *mut ip::IpmgmtRval = door_callp(f.as_raw_fd(), ia, &mut response);
+
+        let resp: *mut ip::IpmgmtRval = door_callp(
+            f.as_raw_fd(), ia, &mut response);
+
         if (*resp).err != 0 {
             free(response as *mut c_void);
             close(sock);
@@ -630,7 +633,8 @@ pub(crate) fn create_ipaddr(
 
     let parts: Vec<&str> = name.as_ref().split("/").collect();
     if parts.len() < 2 {
-        return Err(Error::BadArgument("Expected <ifname>/<addrname>".to_string()));
+        return Err(
+            Error::BadArgument("Expected <ifname>/<addrname>".to_string()));
     }
     let ifname = parts[0];
 
@@ -652,14 +656,14 @@ pub(crate) fn create_ipaddr(
     };
 
 
-    match is_plumbed_for_af(&ifname, sock) {
+    match is_plumbed_for_af(ifname, sock) {
         true => {}
         false => {
-            plumb_for_af(&ifname, iff)?;
+            plumb_for_af(ifname, iff)?;
         }
     };
 
-    create_ip_addr(ifname, name.as_ref(), addr, sock)
+    create_ip_addr_static(ifname, name.as_ref(), addr, sock)
 
 }
 
@@ -679,7 +683,17 @@ fn plumb_for_af(name: &str, ifflags: u32) -> Result<(), Error> {
     // TODO not handling interfaces assigned to different zones correctly.
     // TODO not handling loopback as special case like libipadm does
 
-    let ip_h = dlpi::open(name, dlpi::sys::DLPI_NOATTACH)?;
+    println!("opening {}", name);
+
+    let ip_h = match dlpi::open(name, dlpi::sys::DLPI_NOATTACH) {
+        Ok(h) => h,
+        Err(e) => {
+            return Err(Error::Ioctl(
+                    format!(
+                        "DLPI open: {}: {}", e.to_string(), sys::errno_string())
+            ));
+        }
+    };
     let ip_fd = match dlpi::fd(ip_h) {
         Ok(fd) => fd,
         Err(e) => {
@@ -769,6 +783,14 @@ fn plumb_for_af(name: &str, ifflags: u32) -> Result<(), Error> {
                 "PLINK IP, {}, {}, {}", mux_fd, ip_fd, sys::errno_string(),
             )));
         }
+
+        // TODO check
+        unsafe { libc::close(mux_fd); }
+        dlpi::close(ip_h);
+
+        crate::ndpd::disable_autoconf(name)
+            .map_err(|e| Error::Ioctl(
+                    format!("ndp disable: {}", e.to_string())))?;
         return Ok(())
 
     }
@@ -821,10 +843,13 @@ fn plumb_for_af(name: &str, ifflags: u32) -> Result<(), Error> {
 
     dlpi::close(ip_h);
     dlpi::close(arp_h);
+
+    crate::ndpd::disable_autoconf(name)
+        .map_err(|e| Error::Ioctl(
+                format!("ndp disable: {}", e.to_string())))?;
+
+
     Ok(())
-
-    //TODO handle ndpd interactions :/
-
     
 }
 
@@ -1049,8 +1074,146 @@ unsafe fn ipaddr_info(x: &sys::lifreq, s4: i32, s6: i32) -> Result<IpInfo, Error
     })
 }
 
+pub(crate) fn enable_v6_link_local(ifname: &str) -> Result<(), Error> {
+
+    let objname = format!("{}/v6", ifname);
+
+    let sock = unsafe{ socket(AF_INET6 as i32, SOCK_DGRAM as i32, 0) };
+    if sock < 0 {
+        return Err(Error::Ioctl("socket 6".to_string()));
+    }
+
+    println!("checking plumbing");
+    match is_plumbed_for_af(ifname, sock) {
+        true => {}
+        false => {
+            println!("plumbing");
+            plumb_for_af(ifname, sys::IFF_IPV6)?;
+        }
+    };
+
+    println!("creating");
+    create_ip_addr_linklocal(sock, ifname, &objname)
+
+}
+
+pub fn create_ip_addr_linklocal(
+    sock: i32, ifname: &str, objname: &str) -> Result<(), Error> {
+
+    let mut req = sys::lifreq::default();
+    for (i,c) in ifname.chars().enumerate() {
+        req.lifr_name[i] = c as i8;
+    }
+    create_logical_interface(sock, &req)?;
+
+    let ll_template = [0xfe, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+    unsafe {
+        req.lifr_lifru.lifru_addr = std::mem::zeroed();
+
+        let sin6 = &mut req.lifr_lifru.lifru_addr
+            as *mut sockaddr_storage
+            as *mut sockaddr_in6;
+
+        // Set netmask to /10
+        (*sin6).sin6_family = AF_INET6 as u16;
+        (*sin6).sin6_addr.s6_addr = [
+            0b11111111, 0b11000000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
+        let ret = ioctl(sock, sys::SIOCSLIFNETMASK, &req);
+        if ret < 0 {
+            return Err(Error::Ioctl(
+                    format!("ioctl SIOSLIFNETMASK: {}", sys::errno_string())))
+        }
+
+        // Set address. In the kernel SIOCSLIFADDR uses the ill_token associated
+        // with this interface to create an EUI-64 address.
+        (*sin6).sin6_addr.s6_addr = ll_template;
+        let ret = ioctl(sock, sys::SIOCSLIFPREFIX, &req);
+        if ret < 0 {
+            return Err(Error::Ioctl(
+                    format!("ioctl SIOSLIFADDR: {}", sys::errno_string())))
+        }
+
+        // add if to ipmgmtd
+        let (kernel_ifname, lifnum) = parse_ifname(&req)?;
+
+        let f = File::open("/etc/svc/volatile/ipadm/ipmgmt_door")?;
+
+        println!("adding to ipmgmtd");
+        add_if_to_ipmgmtd(objname, ifname, AF_INET6 as u16, lifnum, &f)?;
+
+        // ensure interface is up
+        let mut req: sys::lifreq = std::mem::zeroed();
+        for (i,c) in kernel_ifname.chars().enumerate() {
+            req.lifr_name[i] = c as i8;
+        }
+        let ret = ioctl(sock, sys::SIOCGLIFFLAGS, &req);
+        if ret < 0 {
+            return Err(Error::Ioctl(
+                    format!("ioctl SIOCGLIFFLAGS: {}", sys::errno_string())))
+        }
+        req.lifr_lifru.lifru_flags |= sys::IFF_UP as u64;
+        let ret = ioctl(sock, sys::SIOCSLIFFLAGS, &req);
+        if ret < 0 {
+            return Err(Error::Ioctl(
+                    format!("ioctl SIOCSLIFFLAGS: {}", sys::errno_string())))
+        }
+
+        let intfidlen = 0;
+        let stateless = true;
+        let stateful = false;
+
+        crate::ndpd::create_addrs(
+            ifname,
+            *sin6,
+            intfidlen,
+            stateless,
+            stateful,
+            objname,
+        ).map_err(|e| Error::Ioctl(format!(
+                "ndp create addrs: {}", e.to_string())))?;
+
+        println!("persisting to ipmgmtd");
+        ipmgmtd_persist(objname, ifname, lifnum, None, &f)?;
+    }
+
+    Ok(())
+
+}
+
+fn create_logical_interface(sock: i32, req: &sys::lifreq) -> Result<(), Error> {
+    let ret = unsafe{ ioctl(sock,  sys::SIOCLIFADDIF, req) };
+    if ret < 0 {
+        return Err(Error::Ioctl(
+                format!("ioctl SIOCLIFADDIF: {}", sys::errno_string())))
+    }
+    Ok(())
+}
+
+fn parse_ifname<'a>(req: &'a sys::lifreq) -> Result<(&'a str, i32), Error> {
+
+    let ifname = unsafe {
+        std::ffi::CStr::from_ptr(&req.lifr_name[0]).to_str()?
+    };
+
+    let parts: Vec<&str> = ifname.split(":").collect();
+    let lifnum = match parts.len() {
+        2 => {
+            match i32::from_str_radix(parts[1], 10) {
+                Ok(n) => n,
+                Err(_) => 0,
+            }
+        }
+        _ => 0,
+    };
+
+    Ok((ifname, lifnum))
+}
+
+
 //TODO check auth?
-pub(crate) fn create_ip_addr(
+pub(crate) fn create_ip_addr_static(
     ifname: impl AsRef<str>,
     objname: impl AsRef<str>,
     addr: IpPrefix,
@@ -1065,13 +1228,9 @@ pub(crate) fn create_ip_addr(
             req.lifr_name[i] = c as i8;
         }
 
-        // create logical ip interface
-        let ret = ioctl(sock,  sys::SIOCLIFADDIF, &req);
-        if ret < 0 {
-            return Err(Error::Ioctl(
-                    format!("ioctl SIOCLIFADDIF: {}", sys::errno_string())))
-        }
+        create_logical_interface(sock, &req)?;
 
+        /*
         let kernel_ifname = std::ffi::CStr::from_ptr(
             &mut req.lifr_name[0]).to_str()?;
 
@@ -1085,12 +1244,16 @@ pub(crate) fn create_ip_addr(
             }
             _ => 0,
         };
+        */
+
 
         // assign addr
         match addr {
             IpPrefix::V6(a) => {
                 req.lifr_lifru.lifru_addr.ss_family = AF_INET6 as u16;
-                let sas = &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage;
+                let sas = 
+                    &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage;
+
                 let sa6 = sas as *mut sockaddr_in6;
                 (*sa6).sin6_addr.s6_addr = a.addr.octets();
             }
@@ -1104,11 +1267,14 @@ pub(crate) fn create_ip_addr(
                     format!("ioctl SIOCSLIFADDR: {}", sys::errno_string())))
         }
 
+
         // assign netmask
         match addr {
             IpPrefix::V6(a) => {
                 req.lifr_lifru.lifru_addr.ss_family = AF_INET6 as u16;
-                let sas = &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage;
+                let sas = 
+                    &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage;
+
                 let sa6 = sas as *mut sockaddr_in6;
                 let mut addr: u128 = 0;
                 for i in 0..a.mask {
@@ -1126,6 +1292,19 @@ pub(crate) fn create_ip_addr(
                     format!("ioctl SIOCSLIFADDR: {}", sys::errno_string())))
         }
 
+        // add if to ipmgmtd
+        let (kernel_ifname, lifnum) = parse_ifname(&req)?;
+
+        let af = match addr {
+            IpPrefix::V6(_) => AF_INET6 as u16,
+            IpPrefix::V4(_) => AF_INET as u16,
+        };
+
+        let f = File::open("/etc/svc/volatile/ipadm/ipmgmt_door")?;
+
+        add_if_to_ipmgmtd(objname.as_ref(), ifname.as_ref(), af, lifnum, &f)?;
+
+        /*
         // assign name
         let mut iaa: ip::IpmgmtAobjopArg = std::mem::zeroed();
         iaa.cmd = ip::IpmgmtCmd::AddrobjLookupAdd;
@@ -1150,7 +1329,6 @@ pub(crate) fn create_ip_addr(
         door_callp(f.as_raw_fd(), iaa, &mut response);
         free(response as *mut c_void);
 
-        // set logical interface number
     
         iaa = std::mem::zeroed();
         iaa.cmd = ip::IpmgmtCmd::AddrobjSetLifnum;
@@ -1174,6 +1352,7 @@ pub(crate) fn create_ip_addr(
 
         door_callp(f.as_raw_fd(), iaa, &mut response);
         free(response as *mut c_void);
+        */
 
         // set up
         
@@ -1188,7 +1367,12 @@ pub(crate) fn create_ip_addr(
                     format!("ioctl SIOCSLIFFLAGS: {}", sys::errno_string())))
         }
 
+        // ipmgmtd persist .. kindof
+        ipmgmtd_persist(
+            objname.as_ref(), ifname.as_ref(), lifnum, Some(addr), &f)?;
+
         // persist.... kindof
+        /*
         let mut nvl = nvpair::NvList::new_unique_names();
         nvl.insert("_ifname", ifname.as_ref())?;
         nvl.insert("_aobjname", objname.as_ref())?;
@@ -1250,8 +1434,10 @@ pub(crate) fn create_ip_addr(
             buf.as_slice(),
         );
         if resp.err != 0 {
-            return Err(Error::Ipmgmtd(format!("{}", sys::err_string(resp.err))));
+            return Err(Error::Ipmgmtd(
+                    format!("{}", sys::err_string(resp.err))));
         }
+        */
 
         //TODO duplicate address detection
         //let rtsock = socket(libc::AF_ROUTE, libc::SOCK_RAW, family as i32);
@@ -1260,6 +1446,158 @@ pub(crate) fn create_ip_addr(
 
     Ok(())
 
+}
+
+fn add_if_to_ipmgmtd(
+    objname: &str,
+    ifname: &str,
+    af: u16,
+    lifnum: i32,
+    f: &File,
+) -> Result<(), Error>
+{
+
+    // assign name
+    let mut iaa: ip::IpmgmtAobjopArg = unsafe{ std::mem::zeroed() };
+    iaa.cmd = ip::IpmgmtCmd::AddrobjLookupAdd;
+    for (i, c) in objname.chars().enumerate() {
+        iaa.objname[i] = c as i8;
+    }
+    for (i, c) in ifname.chars().enumerate() {
+        iaa.ifname[i] = c as i8;
+    }
+    iaa.family = af;
+    iaa.atype = ip::AddrType::Static;
+
+    let mut response: *mut ip::IpmgmtRval = unsafe{
+        malloc(std::mem::size_of::<ip::IpmgmtRval>()) as *mut ip::IpmgmtRval
+    };
+
+    door_callp(f.as_raw_fd(), iaa, &mut response);
+    unsafe { free(response as *mut c_void) };
+
+    // set logical interface number
+
+    iaa = unsafe{ std::mem::zeroed() };
+    iaa.cmd = ip::IpmgmtCmd::AddrobjSetLifnum;
+    for (i, c) in objname.chars().enumerate() {
+        iaa.objname[i] = c as i8;
+    }
+    for (i, c) in ifname.chars().enumerate() {
+        iaa.ifname[i] = c as i8;
+    }
+    iaa.lnum = lifnum;
+    let family = af;
+    iaa.family = family;
+    iaa.atype = ip::AddrType::Static;
+
+    let mut response: *mut ip::IpmgmtRval = unsafe {
+        malloc(std::mem::size_of::<ip::IpmgmtRval>()) as *mut ip::IpmgmtRval
+    };
+
+    door_callp(f.as_raw_fd(), iaa, &mut response);
+    unsafe{ free(response as *mut c_void) };
+
+    Ok(())
+
+}
+
+fn ipmgmtd_persist(
+    objname: &str,
+    ifname: &str,
+    lifnum: i32,
+    addr: Option<IpPrefix>,
+    f: &File,
+) -> Result<(), Error>
+{
+    let mut nvl = nvpair::NvList::new_unique_names();
+    nvl.insert("_ifname", ifname)?;
+    nvl.insert("_aobjname", objname)?;
+    nvl.insert("_lifnum", &(lifnum as i32))?;
+
+    match addr {
+        Some(addr) => {
+            let ahname = match addr {
+                IpPrefix::V6(a) => a.addr.to_string(),
+                IpPrefix::V4(a) => a.addr.to_string(),
+            };
+
+            let mut addr_nvl = nvpair::NvList::new_unique_names();
+            addr_nvl.insert("_aname", ahname.as_str())?;
+            let addr_nvl_name = match addr {
+                IpPrefix::V6(_) => "_ipv6addr",
+                IpPrefix::V4(_) => "_ipv4addr",
+            };
+
+            nvl.insert(addr_nvl_name, addr_nvl.as_ref())?;
+            nvl.insert("up", "yes")?;
+        }
+        // XXX hack: assuming this is a v6 link local
+        None => {
+            let mut ll_nvl = nvpair::NvList::new_unique_names();
+            //let ll_template: [u8;16] = [
+            //    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+            //ll_nvl.insert("_addr", &ll_template[..])?;
+            let prefixlen: u32 = 0;
+            ll_nvl.insert("prefixlen", &prefixlen)?;
+            ll_nvl.insert("_stateless", "yes")?;
+            ll_nvl.insert("_stateful", "no")?;
+            nvl.insert("_intfid", ll_nvl.as_ref())?;
+        }
+    }
+
+
+    let nvl_c = nvl.as_mut_ptr();
+    let mut nvl_buf: *mut c_char = std::ptr::null_mut();
+    let mut nvl_sz: nvpair_sys::size_t = 0;
+    let ret = unsafe {
+        nvpair_sys::nvlist_pack(
+            nvl_c,
+            &mut nvl_buf,
+            &mut nvl_sz,
+            nvpair_sys::NV_ENCODE_NATIVE,
+            0,
+        )
+    };
+    if ret != 0 {
+        return Err(Error::NvPair(format!("{}", ret)));
+    }
+
+    let arg = ip::IpmgmtSetAddr{
+        cmd: ip::IpmgmtCmd::SetAddr,
+        flags: sys::IPMGMT_ACTIVE,
+        nvlsize: nvl_sz as u32,
+    };
+
+    let mut buf: Vec<c_char> = Vec::new();
+
+    let arg_bytes = unsafe {
+        std::slice::from_raw_parts(
+            (&arg as *const ip::IpmgmtSetAddr) as *const c_char,
+            size_of::<ip::IpmgmtSetAddr>(),
+        )
+    };
+    for c in arg_bytes {
+        buf.push(*c);
+    }
+
+    let nvl_bytes = unsafe { 
+        std::slice::from_raw_parts(nvl_buf, nvl_sz as usize)
+    };
+    for c in nvl_bytes {
+        buf.push(*c);
+    }
+
+    let resp: ip::IpmgmtRval = door_call_slice(
+        f.as_raw_fd(),
+        buf.as_slice(),
+    );
+    if resp.err != 0 {
+        return Err(Error::Ipmgmtd(
+                format!("{}", sys::err_string(resp.err))));
+    }
+
+    Ok(())
 }
 
 fn sockaddr2ipaddr(sa: &libc::sockaddr_storage) -> Option<IpAddr> {

@@ -49,6 +49,8 @@ enum SubCommand {
     Create(Create),
     #[clap(about = "delete things")]
     Delete(Delete),
+    #[clap(about = "enable things")]
+    Enable(Enable),
     #[clap(about = "connect two simnet peers")]
     Connect(SimnetConnect),
 }
@@ -65,6 +67,13 @@ struct Show {
 struct Create {
     #[clap(subcommand)]
     subcmd: CreateSubCommand,
+}
+
+#[derive(Parser)]
+#[clap(setting = AppSettings::InferSubcommands)]
+struct Enable {
+    #[clap(subcommand)]
+    subcmd: EnableSubCommand,
 }
 
 #[derive(Parser)]
@@ -103,6 +112,70 @@ enum CreateSubCommand {
     Addr(CreateAddr),
     #[clap(about = "create a route")]
     Route(CreateRoute),
+}
+
+#[derive(Parser)]
+#[clap(setting = AppSettings::InferSubcommands)]
+enum EnableSubCommand {
+    #[clap(about = "Enable IPv4 network functions")]
+    V4(EnableV4Subcommand),
+    #[clap(about = "Enable IPv6 network functions")]
+    V6(EnableV6Subcommand),
+}
+
+/// Enable IPv6 network functions.
+#[derive(Parser)]
+#[clap(setting = AppSettings::InferSubcommands)]
+struct EnableV6Subcommand {
+    #[clap(about = "available functions: link-local (or ll), or dhcp")]
+    function: V6Function,
+    #[clap(about = "interface name")]
+    interface: String
+}
+
+/// Enable IPv4 network functions.
+#[derive(Parser)]
+#[clap(setting = AppSettings::InferSubcommands)]
+struct EnableV4Subcommand {
+    #[clap(about = "available functions: dhcp")]
+    function: V4Function,
+    #[clap(about = "interface name")]
+    interface: String
+}
+
+#[derive(Parser)]
+enum V6Function {
+    LinkLocal,
+    Dhcp,
+}
+
+impl std::str::FromStr for V6Function {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "link-local" => Ok(V6Function::LinkLocal),
+            "ll" => Ok(V6Function::LinkLocal),
+            "dhcp" => Ok(V6Function::Dhcp),
+            _ => Err(anyhow!("V6 function must be link-local, ll or dhcp")),
+        }
+    }
+}
+
+impl std::str::FromStr for V4Function {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "dhcp" => Ok(V4Function::Dhcp),
+            _ => Err(anyhow!("V4 function must be dhcp")),
+        }
+    }
+}
+
+#[derive(Parser)]
+enum V4Function {
+    Dhcp,
 }
 
 #[derive(Parser)]
@@ -239,6 +312,18 @@ fn main() {
                 Err(e) => error!("{}", e),
             },
         },
+        SubCommand::Enable(ref e) => match e.subcmd {
+            EnableSubCommand::V4(ref cmd) => match enable_v4_function(
+                &opts, &e, &cmd) {
+                Ok(()) => {}
+                Err(e) => error!("{}", e),
+            }
+            EnableSubCommand::V6(ref cmd) => match enable_v6_function(
+                &opts, &e, &cmd) {
+                Ok(()) => {}
+                Err(e) => error!("{}", e),
+            }
+        }
         SubCommand::Connect(ref c) => match connect_simnet_peers(&opts, &c) {
             Ok(()) => {}
             Err(e) => error!("{}", e),
@@ -286,6 +371,17 @@ fn delete_route(_opts: &Opts, _c: &Delete, c: &DeleteRoute) -> Result<()> {
     netadm_sys::delete_route(c.destination, c.gateway)?;
     // should we print back?
     Ok(())
+}
+
+fn enable_v4_function(_opts: &Opts, _c: &Enable, _cmd: &EnableV4Subcommand)
+    -> Result<()> {
+        todo!();
+}
+
+fn enable_v6_function(_opts: &Opts, _c: &Enable, cmd: &EnableV6Subcommand)
+    -> Result<()> {
+        netadm_sys::enable_v6_link_local(&cmd.interface)?;
+        Ok(())
 }
 
 fn show_links(_opts: &Opts, _s: &Show, _l: &ShowLinks) -> Result<()> {

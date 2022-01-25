@@ -16,6 +16,7 @@ pub mod kstat;
 pub mod link;
 pub mod nvlist;
 pub mod route;
+pub mod ndpd;
 mod sys;
 
 #[derive(thiserror::Error, Debug)]
@@ -46,6 +47,8 @@ pub enum Error {
     NvPair(String),
     #[error("route error: {0}")]
     Route(#[from] route::Error),
+    #[error("ndp error: {0}")]
+    Ndp(String),
 
 }
 
@@ -287,6 +290,14 @@ pub fn create_ipaddr(
 ) -> Result<(), Error> {
 
     crate::ioctl::create_ipaddr(name, addr)
+}
+
+/// Enable generation of an IPv6 link-local address for an interface
+pub fn enable_v6_link_local(
+    name: impl AsRef<str>,
+) -> Result<(), Error> {
+
+    crate::ioctl::enable_v6_link_local(name.as_ref())
 }
 
 /// Delete an IP address with the given address object name.
