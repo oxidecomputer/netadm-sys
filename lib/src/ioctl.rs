@@ -644,14 +644,14 @@ pub(crate) fn create_ipaddr(
             if s4 < 0 {
                 return Err(Error::Ioctl("socket 4".to_string()));
             }
-            (sys::IFF_IPV4, s4)
+            (sys::IFF_IPV4.into(), s4)
         }
         IpPrefix::V6(_) => {
             let s6 = unsafe{ socket(AF_INET6 as i32, SOCK_DGRAM as i32, 0) };
             if s6 < 0 {
                 return Err(Error::Ioctl("socket 6".to_string()));
             }
-            (sys::IFF_IPV6, s6)
+            (sys::IFF_IPV6.into(), s6)
         }
     };
 
@@ -678,7 +678,7 @@ fn is_plumbed_for_af(name: &str, sock: i32) -> bool {
 
 }
 
-fn plumb_for_af(name: &str, ifflags: u32) -> Result<(), Error> {
+fn plumb_for_af(name: &str, ifflags: u64) -> Result<(), Error> {
 
     // TODO not handling interfaces assigned to different zones correctly.
     // TODO not handling loopback as special case like libipadm does
@@ -717,8 +717,9 @@ fn plumb_for_af(name: &str, ifflags: u32) -> Result<(), Error> {
     let spec = parse_ifspec(name);
 
     // create the new interface via SIOCSLIFNAME
+    let ifflags = ifflags | sys::IFF_NOLINKLOCAL;
     let mut req = sys::lifreq::new();
-    req.lifr_lifru.lifru_flags = ifflags as u64;
+    req.lifr_lifru.lifru_flags = ifflags.into();
     req.lifr_lifru1.lifru_ppa = spec.ppa;
 
     for (i, c) in name.chars().enumerate() {
@@ -743,7 +744,7 @@ fn plumb_for_af(name: &str, ifflags: u32) -> Result<(), Error> {
         _ => {}
     }
     
-    let mux_fd = if (ifflags & sys::IFF_IPV6) != 0 {
+    let mux_fd = if (ifflags & (sys::IFF_IPV6 as u64)) != 0 {
         let dev = b"/dev/udp6\0";
         let devname = CStr::from_bytes_with_nul(dev).unwrap();
         unsafe { libc::open(devname.as_ptr(), libc::O_RDWR) }
@@ -773,7 +774,7 @@ fn plumb_for_af(name: &str, ifflags: u32) -> Result<(), Error> {
     }
 
     // check if ARP is not needed
-    if (ifflags & (sys::IFF_NOARP | sys::IFF_IPV6)) != 0 {
+    if (ifflags & ((sys::IFF_NOARP | sys::IFF_IPV6) as u64)) != 0 {
 
         let ip_muxid = unsafe { ioctl(mux_fd, sys::I_PLINK, ip_fd) };
         if ip_muxid == -1 {
@@ -948,10 +949,9 @@ pub fn get_ipaddr_info(name: &str) -> Result<IpInfo, Error> {
         if ret != 0 {
             close(s4);
             close(s6);
-            return Err(Error::Ioctl("ioctl SIOCGLIFINDEX".to_string()));
+            return Err(Error::Ioctl("ioctl SIOCGLIFADDr".to_string()));
         }
 
-        /*
         let lifc = sys::lifconf {
             lifc_family: af as u16,
             lifc_flags: (sys::LIFC_NOXMIT
@@ -970,8 +970,6 @@ pub fn get_ipaddr_info(name: &str) -> Result<IpInfo, Error> {
             close(s6);
             return Err(Error::Ioctl("ioctl SIOCGLIFCONF".to_string()));
         }
-        */
-
 
         ipaddr_info(&req, s4, s6)
 
@@ -1088,7 +1086,7 @@ pub(crate) fn enable_v6_link_local(ifname: &str) -> Result<(), Error> {
         true => {}
         false => {
             println!("plumbing");
-            plumb_for_af(ifname, sys::IFF_IPV6)?;
+            plumb_for_af(ifname, sys::IFF_IPV6.into())?;
         }
     };
 
@@ -1104,7 +1102,7 @@ pub fn create_ip_addr_linklocal(
     for (i,c) in ifname.chars().enumerate() {
         req.lifr_name[i] = c as i8;
     }
-    create_logical_interface(sock, &req)?;
+    let (lifnum, kernel_ifname) = create_logical_interface(sock, &req)?;
 
     let ll_template = [0xfe, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
@@ -1135,13 +1133,20 @@ pub fn create_ip_addr_linklocal(
                     format!("ioctl SIOSLIFADDR: {}", sys::errno_string())))
         }
 
-        // add if to ipmgmtd
-        let (kernel_ifname, lifnum) = parse_ifname(&req)?;
+        //let (kernel_ifname, lifnum) = parse_ifname(&req)?;
 
         let f = File::open("/etc/svc/volatile/ipadm/ipmgmt_door")?;
 
+        // add placeholder to ipmgmtd
         println!("adding to ipmgmtd");
-        add_if_to_ipmgmtd(objname, ifname, AF_INET6 as u16, lifnum, &f)?;
+        add_if_to_ipmgmtd(
+            objname,
+            ifname,
+            AF_INET6 as u16,
+            lifnum,
+            &f,
+            ip::AddrType::Ipv6Addrconf,
+         )?;
 
         // ensure interface is up
         let mut req: sys::lifreq = std::mem::zeroed();
@@ -1164,6 +1169,7 @@ pub fn create_ip_addr_linklocal(
         let stateless = true;
         let stateful = false;
 
+        /*
         crate::ndpd::create_addrs(
             ifname,
             *sin6,
@@ -1173,6 +1179,7 @@ pub fn create_ip_addr_linklocal(
             objname,
         ).map_err(|e| Error::Ioctl(format!(
                 "ndp create addrs: {}", e.to_string())))?;
+        */
 
         println!("persisting to ipmgmtd");
         ipmgmtd_persist(objname, ifname, lifnum, None, &f)?;
@@ -1182,13 +1189,38 @@ pub fn create_ip_addr_linklocal(
 
 }
 
-fn create_logical_interface(sock: i32, req: &sys::lifreq) -> Result<(), Error> {
-    let ret = unsafe{ ioctl(sock,  sys::SIOCLIFADDIF, req) };
-    if ret < 0 {
-        return Err(Error::Ioctl(
-                format!("ioctl SIOCLIFADDIF: {}", sys::errno_string())))
+// TODO only considering ipv6
+fn create_logical_interface(sock: i32, req: &sys::lifreq) 
+-> Result<(i32, String), Error> {
+
+    unsafe {
+
+        // first check if the 0th logical interface has an address
+        let ret = ioctl(sock, sys::SIOCGLIFADDR, req);
+        if ret != 0 {
+            return Err(Error::Ioctl("ioctl SIOCGLIFADDR".to_string()));
+        }
+        let sin6 = &req.lifr_lifru.lifru_addr
+            as *const sockaddr_storage
+            as *const sockaddr_in6;
+
+
+        // if addr is not unspecified, this logical interface is taken, create
+        // a new one.
+        if !((*sin6).sin6_addr.s6_addr == [0u8;16]) {
+            println!("found: {:?}", (*sin6).sin6_addr.s6_addr);
+            let ret = ioctl(sock,  sys::SIOCLIFADDIF, req);
+            if ret < 0 {
+                return Err(Error::Ioctl(
+                        format!("ioctl SIOCLIFADDIF: {}", sys::errno_string())))
+            }
+        }
+
+        let (kname, lifnum) = parse_ifname(req)?;
+        Ok((lifnum, kname.into()))
+
     }
-    Ok(())
+
 }
 
 fn parse_ifname<'a>(req: &'a sys::lifreq) -> Result<(&'a str, i32), Error> {
@@ -1196,6 +1228,7 @@ fn parse_ifname<'a>(req: &'a sys::lifreq) -> Result<(&'a str, i32), Error> {
     let ifname = unsafe {
         std::ffi::CStr::from_ptr(&req.lifr_name[0]).to_str()?
     };
+
 
     let parts: Vec<&str> = ifname.split(":").collect();
     let lifnum = match parts.len() {
@@ -1207,6 +1240,8 @@ fn parse_ifname<'a>(req: &'a sys::lifreq) -> Result<(&'a str, i32), Error> {
         }
         _ => 0,
     };
+
+    println!("parsed {} = {}:{}", ifname, ifname, lifnum);
 
     Ok((ifname, lifnum))
 }
@@ -1302,7 +1337,14 @@ pub(crate) fn create_ip_addr_static(
 
         let f = File::open("/etc/svc/volatile/ipadm/ipmgmt_door")?;
 
-        add_if_to_ipmgmtd(objname.as_ref(), ifname.as_ref(), af, lifnum, &f)?;
+        add_if_to_ipmgmtd(
+            objname.as_ref(),
+            ifname.as_ref(),
+            af,
+            lifnum,
+            &f,
+            ip::AddrType::Static,
+        )?;
 
         /*
         // assign name
@@ -1454,6 +1496,7 @@ fn add_if_to_ipmgmtd(
     af: u16,
     lifnum: i32,
     f: &File,
+    kind: ip::AddrType,
 ) -> Result<(), Error>
 {
 
@@ -1467,7 +1510,7 @@ fn add_if_to_ipmgmtd(
         iaa.ifname[i] = c as i8;
     }
     iaa.family = af;
-    iaa.atype = ip::AddrType::Static;
+    iaa.atype = kind;
 
     let mut response: *mut ip::IpmgmtRval = unsafe{
         malloc(std::mem::size_of::<ip::IpmgmtRval>()) as *mut ip::IpmgmtRval
@@ -1489,7 +1532,7 @@ fn add_if_to_ipmgmtd(
     iaa.lnum = lifnum;
     let family = af;
     iaa.family = family;
-    iaa.atype = ip::AddrType::Static;
+    iaa.atype = kind;
 
     let mut response: *mut ip::IpmgmtRval = unsafe {
         malloc(std::mem::size_of::<ip::IpmgmtRval>()) as *mut ip::IpmgmtRval
