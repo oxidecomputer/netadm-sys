@@ -951,18 +951,6 @@ pub fn get_ipaddr_info(name: &str) -> Result<IpInfo, Error> {
             return Err(Error::Ioctl("ioctl SIOCGLIFADDr".to_string()));
         }
 
-        let lifc = sys::lifconf {
-            lifc_family: af as u16,
-            lifc_flags: (sys::LIFC_NOXMIT
-                | sys::LIFC_TEMPORARY
-                | sys::LIFC_ALLZONES
-                | sys::LIFC_UNDER_IPMP) as i32,
-                lifc_len: size_of::<sys::lifreq>() as i32,
-                lifc_lifcu: sys::lifconf_lifcu {
-                    lifcu_req: &mut req as *mut sys::lifreq,
-                },
-        };
-
         ipaddr_info(&req, s4, s6)
 
     }
@@ -1161,7 +1149,6 @@ pub fn create_ip_addr_linklocal(
         let stateless = true;
         let stateful = false;
 
-        /*
         crate::ndpd::create_addrs(
             ifname,
             *sin6,
@@ -1171,7 +1158,6 @@ pub fn create_ip_addr_linklocal(
             objname,
         ).map_err(|e| Error::Ioctl(format!(
                 "ndp create addrs: {}", e.to_string())))?;
-        */
 
         println!("persisting to ipmgmtd");
         ipmgmtd_persist(objname, ifname, lifnum, None, &f)?;

@@ -257,6 +257,7 @@ pub enum IpState {
 }
 
 /// Information in the kernel about an IP address.
+#[derive(Debug)]
 pub struct IpInfo {
     pub ifname: String,
     pub index: i32,
