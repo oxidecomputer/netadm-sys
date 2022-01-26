@@ -931,7 +931,6 @@ pub fn get_ipaddr_info(name: &str) -> Result<IpInfo, Error> {
             return Err(Error::Ioctl("socket 6".to_string()));
         }
 
-
         let ss = match af as i32 {
             libc::AF_INET => s4,
             libc::AF_INET6 => s6,
@@ -963,13 +962,6 @@ pub fn get_ipaddr_info(name: &str) -> Result<IpInfo, Error> {
                     lifcu_req: &mut req as *mut sys::lifreq,
                 },
         };
-
-        let ret = ioctl(ss, sys::SIOCGLIFCONF, &lifc);
-        if ret != 0 {
-            close(s4);
-            close(s6);
-            return Err(Error::Ioctl("ioctl SIOCGLIFCONF".to_string()));
-        }
 
         ipaddr_info(&req, s4, s6)
 
