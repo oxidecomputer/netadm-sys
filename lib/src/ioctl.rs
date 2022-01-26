@@ -508,11 +508,11 @@ pub(crate) fn ipaddr_exists(
 
 }
 
-// TODO this is not completely deleting the address, a reference is still
-// hanging out in ipmgmtd, look to see what ipadm is doing here ....
 pub(crate) fn delete_ipaddr(
     objname: impl AsRef<str>,
 ) -> Result<(), Error> {
+
+    let ifname = objname.as_ref().split("/").collect::<Vec<&str>>()[0];
 
     let f = File::open("/etc/svc/volatile/ipadm/ipmgmt_door")?;
 
@@ -557,6 +557,12 @@ pub(crate) fn delete_ipaddr(
         }
     }
 
+    let kname = unsafe {
+        std::ffi::CStr::from_ptr(&ior.lifr_name[0]).to_str()?
+    };
+    println!("deleting {}", kname);
+
+
     let sock = match resp.family as i32 {
         libc::AF_INET => {
             let s4 = unsafe{ socket(AF_INET as i32, SOCK_DGRAM as i32, 0) };
@@ -566,6 +572,14 @@ pub(crate) fn delete_ipaddr(
             s4
         }
         libc::AF_INET6 => {
+
+            if resp.lnum == 0 {
+                match crate::ndpd::delete_addrs(&ifname) {
+                    Ok(_) => {},
+                    Err(e) => println!("ndp delete addrs: {}", e.to_string()),
+                };
+            }
+
             let s6 = unsafe{ socket(AF_INET6 as i32, SOCK_DGRAM as i32, 0) };
             if s6 < 0 {
                 return Err(Error::Ioctl("socket 6".to_string()));
@@ -579,10 +593,28 @@ pub(crate) fn delete_ipaddr(
     };
 
     if resp.lnum == 0 {
+
+        unsafe{ ior.lifr_lifru.lifru_flags &= !(sys::IFF_UP as u64) };
+        let ret = unsafe{ ioctl(sock, sys::SIOCSLIFFLAGS, &ior)} ;
+        if ret < 0 {
+            unsafe{ close(sock) };
+            return Err(Error::Ioctl(
+                    format!("ioctl SIOCSLIFFLAGS: {}", sys::errno_string())))
+        }
+
+        unsafe {
+            let sin6 = &mut ior.lifr_lifru.lifru_addr
+                as *mut sockaddr_storage
+                as *mut sockaddr_in6;
+            (*sin6).sin6_family = AF_INET6 as u16;
+            (*sin6).sin6_addr.s6_addr = [0u8;16];
+        }
+
         let ret = unsafe{ ioctl(sock, sys::SIOCSLIFADDR, &ior) };
         if ret != 0 {
             unsafe{ close(sock) };
-            return Err(Error::Ioctl("ioctl SIOCSLIFADDR".to_string()));
+            return Err(Error::Ioctl(
+                    format!("ioctl SIOCSLIFADDR : {}", sys::errno_string())))
         }
     } else  {
         let ret = unsafe{ ioctl(sock, sys::SIOCLIFREMOVEIF, &ior) };

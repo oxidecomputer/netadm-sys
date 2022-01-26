@@ -103,6 +103,16 @@ pub fn disable_autoconf(ifname: &str) -> std::io::Result<()> {
     send(&msg)
 }
 
+pub fn delete_addrs(
+    ifname: &str,
+) -> std::io::Result<()> {
+
+    let mut msg = Msg::new(Cmd::DeleteAddrs);
+    msg.ifname[..ifname.len()].copy_from_slice(ifname.as_bytes());
+
+    send(&msg)
+}
+
 pub fn create_addrs(
     ifname: &str,
     intfid: libc::sockaddr_in6,
