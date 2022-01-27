@@ -113,6 +113,7 @@ dependencies = [
 [[package]]
 name = "dlpi"
 version = "0.1.0"
+source = "git+ssh://git@github.com/oxidecomputer/dlpi-sys#945ac97f7fd019510b3cd89878389ccee044317a"
 dependencies = [
  "libc",
 ]

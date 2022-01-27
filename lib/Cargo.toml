@@ -1,11 +1,10 @@
 [package]
 name = "netadm-sys"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 colored = "2"
-rusty-doors = { git = "ssh://git@github.com/oxidecomputer/rusty-doors" }
 tracing = "0.1"
 thiserror = "1"
 libc = "0.2"
@@ -13,8 +12,9 @@ anyhow = "1.0"
 
 # need https://github.com/jmesmon/rust-libzfs/commit/2bf2a5b1 for i32 type
 nvpair = { git = "https://github.com/jmesmon/rust-libzfs", branch = "master" }
-#nvpair = "0.5"
 nvpair-sys = { git = "https://github.com/jmesmon/rust-libzfs", branch = "master" }
+#nvpair = "0.5"
 #nvpair-sys = "0.4"
 
-dlpi  = { path = "/home/ry/src/dlpi-sys" }
+dlpi = { git = "ssh://git@github.com/oxidecomputer/dlpi-sys" }
+rusty-doors = { git = "ssh://git@github.com/oxidecomputer/rusty-doors" }
