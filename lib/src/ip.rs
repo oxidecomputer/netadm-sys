@@ -9,6 +9,7 @@ use std::fs::File;
 use std::mem::{align_of, size_of};
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::os::unix::io::AsRawFd;
+use std::ptr;
 use std::str::FromStr;
 use tracing::{debug, trace, warn};
 use libc::{
@@ -293,7 +294,8 @@ pub fn get_persistent_ipinfo()
         let resp: *mut IpmgmtGetRval = door_callp(
             f.as_raw_fd(),
             request,
-            &mut response);
+            ptr::NonNull::new(&mut response).unwrap(), // null not possible
+        );
         trace!("got {} bytes of nval", (*resp).nval_size);
 
         //// extract nvlist  header

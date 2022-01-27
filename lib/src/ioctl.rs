@@ -33,6 +33,7 @@ use std::ffi::CStr;
 use std::fs::File;
 use std::mem::size_of;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::ptr;
 use std::os::unix::io::AsRawFd;
 use tracing::{debug, warn};
 use libc::{malloc, free};
@@ -487,7 +488,7 @@ pub(crate) fn ipaddr_exists(
     let respp: *mut ip::IpmgmtAobjopRval = door_callp(
         f.as_raw_fd(),
         req,
-        &mut response,
+        ptr::NonNull::new(&mut response).unwrap(), // null not possible
     );
     let resp = unsafe { *respp };
     if resp.err != 0 {
@@ -531,7 +532,7 @@ pub(crate) fn delete_ipaddr(
     let respp: *mut ip::IpmgmtAobjopRval = door_callp(
         f.as_raw_fd(),
         req,
-        &mut response,
+        ptr::NonNull::new(&mut response).unwrap(), // null not possible
     );
     let resp = unsafe { *respp };
     if resp.err != 0 {
@@ -638,8 +639,12 @@ pub(crate) fn delete_ipaddr(
             ip::IpmgmtRval,
             >()) as *mut ip::IpmgmtRval;
 
-        let resp: *mut ip::IpmgmtRval = door_callp(
-            f.as_raw_fd(), ia, &mut response);
+        let resp: *mut ip::IpmgmtRval = 
+            door_callp(
+            f.as_raw_fd(),
+            ia,
+            ptr::NonNull::new(&mut response).unwrap(), // null not possible
+        );
 
         if (*resp).err != 0 {
             free(response as *mut c_void);
@@ -1526,7 +1531,11 @@ fn add_if_to_ipmgmtd(
         malloc(std::mem::size_of::<ip::IpmgmtRval>()) as *mut ip::IpmgmtRval
     };
 
-    door_callp(f.as_raw_fd(), iaa, &mut response);
+    door_callp(
+        f.as_raw_fd(),
+        iaa,
+        ptr::NonNull::new(&mut response).unwrap(), // null not possible
+    );
     unsafe { free(response as *mut c_void) };
 
     // set logical interface number
@@ -1548,7 +1557,11 @@ fn add_if_to_ipmgmtd(
         malloc(std::mem::size_of::<ip::IpmgmtRval>()) as *mut ip::IpmgmtRval
     };
 
-    door_callp(f.as_raw_fd(), iaa, &mut response);
+    door_callp(
+        f.as_raw_fd(),
+        iaa,
+        ptr::NonNull::new(&mut response).unwrap(), // null not possible
+    );
     unsafe{ free(response as *mut c_void) };
 
     Ok(())

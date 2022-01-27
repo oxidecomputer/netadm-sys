@@ -373,7 +373,7 @@ checksum = "f497285884f3fcff424ffc933e56d7cbca511def0c9831a7f9b5f6153e3cc89b"
 [[package]]
 name = "rusty-doors"
 version = "0.1.0"
-source = "git+ssh://git@github.com/oxidecomputer/rusty-doors#2c599220530aea759d5cd17b822c4e5d7d522496"
+source = "git+ssh://git@github.com/oxidecomputer/rusty-doors#e5d19c5df3614e61d0cd1bc4eb17d3dc5bae3f60"
 dependencies = [
  "libc",
  "rusty-doors-macros",
@@ -382,7 +382,7 @@ dependencies = [
 [[package]]
 name = "rusty-doors-macros"
 version = "0.1.0"
-source = "git+ssh://git@github.com/oxidecomputer/rusty-doors#2c599220530aea759d5cd17b822c4e5d7d522496"
+source = "git+ssh://git@github.com/oxidecomputer/rusty-doors#e5d19c5df3614e61d0cd1bc4eb17d3dc5bae3f60"
 dependencies = [
  "quote",
  "syn",
