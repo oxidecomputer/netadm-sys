@@ -1,5 +1,7 @@
 # A Network Administration Crate for Illumos
 
+- [Documentation](https://oxidecomputer.github.io/netadm-sys/netadm_sys/index.html)
+
 While the end goal of this crate is to become a stable API for all things
 networking on illumos, right now it is the opposite of that. It's as much of an
 exploration of the networking subsystems on illumos and how they can be
