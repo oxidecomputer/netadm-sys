@@ -47,8 +47,7 @@ pub fn get_routes() -> Result<Vec<Route>, Error> {
             return Err(Error::SystemError(format!("socket: {}", sys::errno)));
         }
 
-        let mut req = rt_msghdr::default();
-        req.typ = sys::RTM_GETALL as u8;
+        let req = rt_msghdr::default();
 
         let mut n = write(
             sfd,
@@ -85,19 +84,59 @@ pub fn get_routes() -> Result<Vec<Route>, Error> {
                 _ => continue,
             };
 
-            result.push(Route {
-                dest: match (*dst).sa_family as i32 {
-                    libc::AF_INET => {
-                        let dst = dst as *mut sockaddr_in;
-                        IpAddr::V4(Ipv4Addr::from(u32::from_be(
-                            (*dst).sin_addr.s_addr,
-                        )))
+            let dest = match (*dst).sa_family as i32 {
+                libc::AF_INET => {
+                    let dst = dst as *mut sockaddr_in;
+                    IpAddr::V4(Ipv4Addr::from(u32::from_be(
+                        (*dst).sin_addr.s_addr,
+                    )))
+                }
+                libc::AF_INET6 => {
+                    let dst = dst as *mut sockaddr_in6;
+                    IpAddr::V6(Ipv6Addr::from(u128::from_be_bytes(
+                        (*dst).sin6_addr.s6_addr,
+                    )))
+                }
+                _ => {
+                    p = (p as *mut u8).offset((*hdr).msglen as isize);
+                    if p.offset_from(buf.as_mut_ptr()) >= n as isize {
+                        break;
                     }
+                    continue;
+                }
+            };
+
+            let mask = match (*mask).sa_family as i32 {
+                libc::AF_INET => {
+                    let mask = mask as *mut sockaddr_in;
+                    u32::leading_ones(u32::from_be((*mask).sin_addr.s_addr))
+                }
+                libc::AF_INET6 => {
+                    let mask = mask as *mut sockaddr_in6;
+                    u128::leading_ones(u128::from_be_bytes(
+                        (*mask).sin6_addr.s6_addr,
+                    ))
+                }
+                _ => 0,
+            };
+
+            let gw = match (*gw).sa_family as i32 {
+                libc::AF_INET => {
+                    let gw = gw as *mut sockaddr_in;
+                    IpAddr::V4(Ipv4Addr::from(u32::from_be(
+                        (*gw).sin_addr.s_addr,
+                    )))
+                }
+                libc::AF_INET6 => {
+                    let gw = gw as *mut sockaddr_in6;
+                    IpAddr::V6(Ipv6Addr::from(u128::from_be_bytes(
+                        (*gw).sin6_addr.s6_addr,
+                    )))
+                }
+                _ => match (*dst).sa_family as i32 {
+                    libc::AF_INET => IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
                     libc::AF_INET6 => {
-                        let dst = dst as *mut sockaddr_in6;
-                        IpAddr::V6(Ipv6Addr::from(u128::from_be_bytes(
-                            (*dst).sin6_addr.s6_addr,
-                        )))
+                        IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0))
                     }
                     _ => {
                         p = (p as *mut u8).offset((*hdr).msglen as isize);
@@ -107,47 +146,9 @@ pub fn get_routes() -> Result<Vec<Route>, Error> {
                         continue;
                     }
                 },
-                mask: match (*mask).sa_family as i32 {
-                    libc::AF_INET => {
-                        let mask = mask as *mut sockaddr_in;
-                        u32::leading_ones(u32::from_be((*mask).sin_addr.s_addr))
-                    }
-                    libc::AF_INET6 => {
-                        let mask = mask as *mut sockaddr_in6;
-                        u128::leading_ones(u128::from_be_bytes(
-                            (*mask).sin6_addr.s6_addr,
-                        ))
-                    }
-                    _ => 0,
-                },
-                gw: match (*gw).sa_family as i32 {
-                    libc::AF_INET => {
-                        let gw = gw as *mut sockaddr_in;
-                        IpAddr::V4(Ipv4Addr::from(u32::from_be(
-                            (*gw).sin_addr.s_addr,
-                        )))
-                    }
-                    libc::AF_INET6 => {
-                        let gw = gw as *mut sockaddr_in6;
-                        IpAddr::V6(Ipv6Addr::from(u128::from_be_bytes(
-                            (*gw).sin6_addr.s6_addr,
-                        )))
-                    }
-                    _ => match (*dst).sa_family as i32 {
-                        libc::AF_INET => IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-                        libc::AF_INET6 => {
-                            IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0))
-                        }
-                        _ => {
-                            p = (p as *mut u8).offset((*hdr).msglen as isize);
-                            if p.offset_from(buf.as_mut_ptr()) >= n as isize {
-                                break;
-                            }
-                            continue;
-                        }
-                    },
-                },
-            });
+            };
+
+            result.push(Route { dest, mask, gw });
 
             p = (p as *mut u8).offset((*hdr).msglen as isize);
             if p.offset_from(buf.as_mut_ptr()) >= n as isize {
@@ -219,16 +220,22 @@ fn mod_route(
             }
         };
 
-        let mut req = rt_msghdr::default();
-        req.typ = cmd;
-        req.msglen = msglen as u16;
-        req.version = sys::RTM_VERSION as u8;
-        //req.index TODO?
-        req.flags = (sys::RTF_GATEWAY | sys::RTF_STATIC) as i32; //TODO more?
-                                                                 // set bitmask identifying addresses in message
-        req.addrs = (RTA_DST | RTA_GATEWAY | RTA_NETMASK) as i32;
-        req.pid = std::process::id() as i32;
-        req.seq = 47; //TODO
+        let req = rt_msghdr {
+            typ: cmd,
+            msglen: msglen as u16,
+            version: sys::RTM_VERSION as u8,
+            addrs: (RTA_DST | RTA_GATEWAY | RTA_NETMASK) as i32,
+            pid: std::process::id() as i32,
+
+            //TODO
+            seq: 47,
+
+            //TODO more?
+            // set bitmask identifying addresses in message
+            flags: (sys::RTF_GATEWAY | sys::RTF_STATIC) as i32,
+
+            ..Default::default()
+        };
 
         let mut buf: Vec<u8> = Vec::new();
         buf.extend_from_slice(from_raw_parts(

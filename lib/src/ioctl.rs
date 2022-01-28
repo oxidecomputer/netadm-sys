@@ -33,7 +33,7 @@ fn dld_fd() -> Result<File, Error> {
         .read(true)
         .write(true)
         .open("/dev/dld")
-        .map_err(|e| Error::File(e))
+        .map_err(Error::File)
 }
 
 #[repr(C)]
@@ -58,7 +58,7 @@ pub(crate) fn get_simnet_info(link_id: u32) -> Result<SimnetInfoIoc, Error> {
 
     unsafe {
         let arg = SimnetInfoIoc {
-            link_id: link_id,
+            link_id,
             peer_link_id: 0,
             typ: 0,
             mac_len: 0,
@@ -81,8 +81,8 @@ pub(crate) fn connect_simnet_peers(
 
     unsafe {
         let arg = SimnetModifyIoc {
-            link_id: link_id,
-            peer_link_id: peer_link_id,
+            link_id,
+            peer_link_id,
             flags: 0,
         };
         let ret = ioctl(fd.as_raw_fd(), SIMNET_IOC_MODIFY, &arg);
@@ -361,11 +361,9 @@ pub(crate) fn get_macaddr(linkid: u32) -> Result<[u8; 6], Error> {
 
         let mut res: [u8; 6] = [0; 6];
 
-        for i in 0..6 {
-            res[i] = arg.info.dmi_addr[i];
-        }
+        res[..6].clone_from_slice(&arg.info.dmi_addr[..6]);
 
-        return Ok(res);
+        Ok(res)
     }
 }
 
@@ -482,11 +480,11 @@ pub(crate) fn ipaddr_exists(objname: impl AsRef<str>) -> Result<bool, Error> {
         return Ok(false);
     }
 
-    return Ok(true);
+    Ok(true)
 }
 
 pub(crate) fn delete_ipaddr(objname: impl AsRef<str>) -> Result<(), Error> {
-    let ifname = objname.as_ref().split("/").collect::<Vec<&str>>()[0];
+    let ifname = objname.as_ref().split('/').collect::<Vec<&str>>()[0];
 
     let f = File::open("/etc/svc/volatile/ipadm/ipmgmt_door")?;
 
@@ -545,7 +543,7 @@ pub(crate) fn delete_ipaddr(objname: impl AsRef<str>) -> Result<(), Error> {
         }
         libc::AF_INET6 => {
             if resp.lnum == 0 {
-                match crate::ndpd::delete_addrs(&ifname) {
+                match crate::ndpd::delete_addrs(ifname) {
                     Ok(_) => {}
                     Err(e) => println!("ndp delete addrs: {}", e.to_string()),
                 };
@@ -639,7 +637,7 @@ pub(crate) fn create_ipaddr(
     name: impl AsRef<str>,
     addr: IpPrefix,
 ) -> Result<(), Error> {
-    let parts: Vec<&str> = name.as_ref().split("/").collect();
+    let parts: Vec<&str> = name.as_ref().split('/').collect();
     if parts.len() < 2 {
         return Err(Error::BadArgument(
             "Expected <ifname>/<addrname>".to_string(),
@@ -709,12 +707,9 @@ fn plumb_for_af(name: &str, ifflags: u64) -> Result<(), Error> {
 
     // push ip module
     let ip_mod_name = CStr::from_bytes_with_nul(sys::IP_MOD_NAME).unwrap();
-    match unsafe { ioctl(ip_fd, sys::I_PUSH, ip_mod_name.as_ptr()) } {
-        -1 => {
-            dlpi::close(ip_h);
-            return Err(Error::Ioctl("IP streams push error".to_string()));
-        }
-        _ => {}
+    if unsafe { ioctl(ip_fd, sys::I_PUSH, ip_mod_name.as_ptr()) } == -1 {
+        dlpi::close(ip_h);
+        return Err(Error::Ioctl("IP streams push error".to_string()));
     }
 
     let spec = parse_ifspec(name);
@@ -722,31 +717,25 @@ fn plumb_for_af(name: &str, ifflags: u64) -> Result<(), Error> {
     // create the new interface via SIOCSLIFNAME
     let ifflags = ifflags | sys::IFF_NOLINKLOCAL;
     let mut req = sys::lifreq::new();
-    req.lifr_lifru.lifru_flags = ifflags.into();
+    req.lifr_lifru.lifru_flags = ifflags;
     req.lifr_lifru1.lifru_ppa = spec.ppa;
 
     for (i, c) in name.chars().enumerate() {
         req.lifr_name[i] = c as i8;
     }
-    match unsafe { ioctl(ip_fd, sys::SIOCSLIFNAME, &req) } {
-        -1 => {
-            dlpi::close(ip_h);
-            return Err(Error::Ioctl(format!(
-                "IP SIOCSLIFNAME, {}, {}",
-                ip_fd,
-                sys::errno_string(),
-            )));
-        }
-        _ => {}
+    if unsafe { ioctl(ip_fd, sys::SIOCSLIFNAME, &req) } == -1 {
+        dlpi::close(ip_h);
+        return Err(Error::Ioctl(format!(
+            "IP SIOCSLIFNAME, {}, {}",
+            ip_fd,
+            sys::errno_string(),
+        )));
     }
 
     // get flags for the interface
-    match unsafe { ioctl(ip_fd, sys::SIOCGLIFFLAGS, &req) } {
-        -1 => {
-            dlpi::close(ip_h);
-            return Err(Error::Ioctl("IP SIOCGLIFNAME".to_string()));
-        }
-        _ => {}
+    if unsafe { ioctl(ip_fd, sys::SIOCGLIFFLAGS, &req) } == -1 {
+        dlpi::close(ip_h);
+        return Err(Error::Ioctl("IP SIOCGLIFNAME".to_string()));
     }
 
     let mux_fd = if (ifflags & (sys::IFF_IPV6 as u64)) != 0 {
@@ -769,12 +758,9 @@ fn plumb_for_af(name: &str, ifflags: u64) -> Result<(), Error> {
 
     // push on arp module
     let arp_mod_name = CStr::from_bytes_with_nul(sys::ARP_MOD_NAME).unwrap();
-    match unsafe { ioctl(mux_fd, sys::I_PUSH, arp_mod_name) } {
-        -1 => {
-            dlpi::close(ip_h);
-            return Err(Error::Ioctl("ARP sterams push error".to_string()));
-        }
-        _ => {}
+    if unsafe { ioctl(mux_fd, sys::I_PUSH, arp_mod_name) } == -1 {
+        dlpi::close(ip_h);
+        return Err(Error::Ioctl("ARP sterams push error".to_string()));
     }
 
     // check if ARP is not needed
@@ -888,12 +874,12 @@ pub struct IfSpec {
 /// - ppa: physical point of attachment (integer)
 /// - lun: logical unit numnber (integer)
 fn parse_ifspec(ifname: &str) -> IfSpec {
-    let parts: Vec<&str> = ifname.split(":").collect();
+    let parts: Vec<&str> = ifname.split(':').collect();
     let (lun, lunvalid) = {
         match parts.len() {
             0 => (0, false),
             1 => (0, false),
-            _ => match u32::from_str_radix(parts[1], 10) {
+            _ => match parts[1].parse::<u32>() {
                 Ok(i) => (i, true),
                 Err(_) => (0, false),
             },
@@ -902,10 +888,7 @@ fn parse_ifspec(ifname: &str) -> IfSpec {
     let name = parts[0].trim_end_matches(char::is_numeric);
     let ppa = {
         let s = &parts[0][..name.len()];
-        match u32::from_str_radix(s, 10) {
-            Ok(i) => i,
-            Err(_) => 0,
-        }
+        s.parse::<u32>().unwrap_or(0)
     };
 
     let mut devnm = [0u8; sys::LIFNAMSIZ];
@@ -924,9 +907,7 @@ fn parse_ifspec(ifname: &str) -> IfSpec {
 pub fn get_ipaddr_info(name: &str) -> Result<IpInfo, Error> {
     unsafe {
         let (_, _, af, ifname, _) = crate::ip::addrobjname_to_addrobj(name)
-            .map_err(|e| {
-                Error::Ioctl(format!("get addrobj: {}", e.to_string()))
-            })?;
+            .map_err(|e| Error::Ioctl(format!("get addrobj: {}", e)))?;
 
         let s4 = socket(AF_INET as i32, SOCK_DGRAM as i32, 0);
         if s4 < 0 {
@@ -1036,37 +1017,33 @@ unsafe fn ipaddr_info(
     let state = {
         if flags & sys::IFF_UP as u64 != 0 {
             IpState::OK
-        } else {
-            if flags & sys::IFF_RUNNING as u64 != 0 {
-                ret = ioctl(ss, sys::SIOCGLIFDADSTATE, x);
-                if ret != 0 {
-                    close(s4);
-                    close(s6);
-                    return Err(Error::Ioctl(
-                        "ioctl SIOCGLIFFLAGS".to_string(),
-                    ));
-                }
-
-                if x.lifr_lifru.lifru_dadstate
-                    == sys::glif_dad_state_t_DAD_IN_PROGRESS
-                {
-                    IpState::Tentative
-                } else {
-                    IpState::OK
-                }
-            } else {
-                IpState::Inaccessible
+        } else if flags & sys::IFF_RUNNING as u64 != 0 {
+            ret = ioctl(ss, sys::SIOCGLIFDADSTATE, x);
+            if ret != 0 {
+                close(s4);
+                close(s6);
+                return Err(Error::Ioctl("ioctl SIOCGLIFFLAGS".to_string()));
             }
+
+            if x.lifr_lifru.lifru_dadstate
+                == sys::glif_dad_state_t_DAD_IN_PROGRESS
+            {
+                IpState::Tentative
+            } else {
+                IpState::OK
+            }
+        } else {
+            IpState::Inaccessible
         }
     };
 
     Ok(IpInfo {
+        addr,
+        state,
         ifname: name.to_string(),
         index: idx,
-        addr: addr,
         mask: ip_mask(mask),
         family: sa.ss_family,
-        state: state,
     })
 }
 
@@ -1204,7 +1181,7 @@ fn create_logical_interface(
 
         // if addr is not unspecified, this logical interface is taken, create
         // a new one.
-        if !((*sin6).sin6_addr.s6_addr == [0u8; 16]) {
+        if (*sin6).sin6_addr.s6_addr != [0u8; 16] {
             println!("found: {:?}", (*sin6).sin6_addr.s6_addr);
             let ret = ioctl(sock, sys::SIOCLIFADDIF, req);
             if ret < 0 {
@@ -1220,16 +1197,13 @@ fn create_logical_interface(
     }
 }
 
-fn parse_ifname<'a>(req: &'a sys::lifreq) -> Result<(&'a str, i32), Error> {
+fn parse_ifname(req: &sys::lifreq) -> Result<(&str, i32), Error> {
     let ifname =
         unsafe { std::ffi::CStr::from_ptr(&req.lifr_name[0]).to_str()? };
 
-    let parts: Vec<&str> = ifname.split(":").collect();
+    let parts: Vec<&str> = ifname.split(':').collect();
     let lifnum = match parts.len() {
-        2 => match i32::from_str_radix(parts[1], 10) {
-            Ok(n) => n,
-            Err(_) => 0,
-        },
+        2 => parts[1].parse::<i32>().unwrap_or(0),
         _ => 0,
     };
 
@@ -1496,7 +1470,7 @@ fn ipmgmtd_persist(
 
     let resp: ip::IpmgmtRval = door_call_slice(f.as_raw_fd(), buf.as_slice());
     if resp.err != 0 {
-        return Err(Error::Ipmgmtd(format!("{}", sys::err_string(resp.err))));
+        return Err(Error::Ipmgmtd(sys::err_string(resp.err)));
     }
 
     Ok(())
@@ -1613,8 +1587,8 @@ pub(crate) fn create_vnic(
         debug!("creating vnic with id {}", id);
 
         let mut arg = VnicIocCreate {
+            link_id,
             vnic_id: id,
-            link_id: link_id,
             mac_addr_type: VnicMacAddrType::Auto,
             mac_len: 0,
             mac_prefix_len: 3,
@@ -1636,7 +1610,7 @@ pub(crate) fn create_vnic(
             return Err(Error::Ioctl(format!("ioctl VNIC_IOC_CREATE {}", ret)));
         }
 
-        Ok(crate::link::get_link(id)?)
+        crate::link::get_link(id)
     }
 }
 
@@ -1666,7 +1640,7 @@ pub(crate) fn create_simnet(
         }
     }
 
-    Ok(crate::link::get_link(id)?)
+    crate::link::get_link(id)
 }
 
 #[repr(C)]

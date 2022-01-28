@@ -51,12 +51,6 @@ pub enum Error {
     Ndp(String),
 }
 
-impl Into<std::io::Error> for Error {
-    fn into(self) -> std::io::Error {
-        std::io::Error::new(std::io::ErrorKind::Other, self.to_string())
-    }
-}
-
 // Datalink management --------------------------------------------------------
 
 /// Link flags specifiy if a link is active, persistent, or both.
@@ -98,7 +92,7 @@ pub enum LinkClass {
     Bridge = 0x40,
     IPtun = 0x80,
     Part = 0x100,
-    All = 0x01 | 0x02 | 0x03 | 0x04 | 0x08 | 0x10 | 0x20 | 0x40 | 0x80 | 0x100,
+    All = 0x1ff,
 }
 
 impl Display for LinkClass {
@@ -174,7 +168,7 @@ impl FromStr for LinkHandle {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match u32::from_str_radix(s, 10) {
+        Ok(match s.parse::<u32>() {
             Ok(id) => LinkHandle::Id(id),
             Err(_) => LinkHandle::Name(s.to_string()),
         })
@@ -192,7 +186,7 @@ pub fn get_link(id: u32) -> Result<LinkInfo, Error> {
 }
 
 /// Given a datalink name, return it's numeric id.
-pub fn linkname_to_id(name: &String) -> Result<u32, Error> {
+pub fn linkname_to_id(name: &str) -> Result<u32, Error> {
     crate::link::linkname_to_id(name)
 }
 
@@ -201,7 +195,7 @@ pub fn linkname_to_id(name: &String) -> Result<u32, Error> {
 /// Simnet links are used in paris. When a pair of simnet links is created,
 /// whaterver ingreses into one flows to the other.
 pub fn create_simnet_link(
-    name: &String,
+    name: &str,
     flags: LinkFlags,
 ) -> Result<LinkInfo, Error> {
     debug!("creating simnet link {}", name);
@@ -213,7 +207,7 @@ pub fn create_simnet_link(
 /// Virtual NICs are devices that are attached to another device. Packets that
 /// ingress the attached device also ingress the VNIC and vice versa.
 pub fn create_vnic_link(
-    name: &String,
+    name: &str,
     link: &LinkHandle,
     flags: LinkFlags,
 ) -> Result<LinkInfo, Error> {
@@ -275,13 +269,10 @@ pub struct IpInfo {
 
 /// Get a list of all IP addresses on the system.
 pub fn get_ipaddrs() -> Result<BTreeMap<String, Vec<IpInfo>>, Error> {
-    let addrs = crate::ioctl::get_ipaddrs();
-
+    crate::ioctl::get_ipaddrs()
     // TODO incorporate more persistent address information from here
     //let paddrs = crate::ip::get_persistent_ipinfo()
     //  .map_err(|e| anyhow!("{}", e))?;
-
-    addrs
 }
 
 /// Get information about a specific IP interface
@@ -357,7 +348,7 @@ impl FromStr for IpPrefix {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match Ipv6Prefix::from_str(s) {
-            Ok(a) => return Ok(IpPrefix::V6(a)),
+            Ok(a) => Ok(IpPrefix::V6(a)),
             _ => Ok(IpPrefix::V4(Ipv4Prefix::from_str(s)?)),
         }
     }
@@ -396,7 +387,7 @@ impl FromStr for Ipv6Prefix {
     type Err = IpPrefixParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parts: Vec<&str> = s.split("/").collect();
+        let parts: Vec<&str> = s.split('/').collect();
         if parts.len() < 2 {
             return Err(IpPrefixParseError::Cidr);
         }
@@ -412,7 +403,7 @@ impl FromStr for Ipv4Prefix {
     type Err = IpPrefixParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parts: Vec<&str> = s.split("/").collect();
+        let parts: Vec<&str> = s.split('/').collect();
         if parts.len() < 2 {
             return Err(IpPrefixParseError::Cidr);
         }

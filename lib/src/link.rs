@@ -131,7 +131,7 @@ pub(crate) fn get_links() -> Result<Vec<LinkInfo>, Error> {
 
     loop {
         let request = DlmgmtGetNext {
-            linkid: linkid,
+            linkid,
             ..Default::default()
         };
         let response: DlmgmtLinkRetval = door_call(f.as_raw_fd(), request);
@@ -215,13 +215,13 @@ pub(crate) fn get_link(id: u32) -> Result<LinkInfo, Error> {
     };
 
     Ok(LinkInfo {
-        id: id,
+        id,
+        mac,
+        over,
         name: name.to_string(),
         flags: response.flags,
         class: response.class,
         state: link_state,
-        mac: mac,
-        over: over,
     })
 }
 
@@ -239,13 +239,9 @@ struct DlmgmtDoorWriteConf {
 }
 
 #[repr(C)]
+#[derive(Default)]
 struct DlmgmtRetval {
     err: u32,
-}
-impl Default for DlmgmtRetval {
-    fn default() -> Self {
-        DlmgmtRetval { err: 0 }
-    }
 }
 
 #[repr(C)]
@@ -255,14 +251,10 @@ struct DlmgmtDoorOpenConf {
 }
 
 #[repr(C)]
+#[derive(Default)]
 struct DlmgmtOpenConfRetval {
     err: u32,
     conf_id: u32,
-}
-impl Default for DlmgmtOpenConfRetval {
-    fn default() -> Self {
-        DlmgmtOpenConfRetval { err: 0, conf_id: 0 }
-    }
 }
 
 const MAXLINKATTRLEN: usize = 32;
@@ -318,7 +310,7 @@ pub(crate) fn connect_simnet_peers(
         )));
     }
     if open_response.conf_id == 0 {
-        return Err(Error::Dlmgmtd(format!("open conf returned confid 0")));
+        return Err(Error::Dlmgmtd("open conf returned confid 0".into()));
     }
     let conf_id = open_response.conf_id;
     debug!("got confid {}", conf_id);
@@ -326,7 +318,7 @@ pub(crate) fn connect_simnet_peers(
     // clear previous value
     let mut clear_request = DlmgmtDoorUnsetAttr {
         cmd: DlmgmtCmd::UnsetAttr,
-        conf_id: conf_id,
+        conf_id,
         attr: [0; MAXLINKATTRLEN],
     };
     for (i, c) in key.chars().enumerate() {
@@ -346,7 +338,7 @@ pub(crate) fn connect_simnet_peers(
     // set attribute
     let mut set_request = DlmgmtDoorSetAttr {
         cmd: DlmgmtCmd::SetAttr,
-        conf_id: conf_id,
+        conf_id,
         attr: [0; MAXLINKATTRLEN],
         attr_sz: (peer_info.name.len() + 1) as u32,
         typ: DlmgmtDoorAttrType::Str,
@@ -370,7 +362,7 @@ pub(crate) fn connect_simnet_peers(
     // write new config
     let write_request = DlmgmtDoorWriteConf {
         cmd: DlmgmtCmd::WriteConf,
-        conf_id: conf_id,
+        conf_id,
     };
     let write_response: DlmgmtRetval = door_call(f.as_raw_fd(), write_request);
     if write_response.err != 0 {
@@ -390,7 +382,7 @@ pub(crate) fn connect_simnet_peers(
 fn close_conf(fd: i32, conf_id: u32) -> Result<(), Error> {
     let close_request = DlmgmtDoorDestroyConf {
         cmd: DlmgmtCmd::DestroyConf,
-        conf_id: conf_id,
+        conf_id,
     };
     let close_response: DlmgmtRetval = door_call(fd, close_request);
     if close_response.err != 0 {
@@ -403,7 +395,7 @@ fn close_conf(fd: i32, conf_id: u32) -> Result<(), Error> {
 }
 
 pub(crate) fn create_simnet_link(
-    name: &String,
+    name: &str,
     flags: LinkFlags,
 ) -> Result<LinkInfo, Error> {
     let id = crate::link::create_link_id(name, LinkClass::Simnet, flags)?;
@@ -417,7 +409,7 @@ pub(crate) fn create_simnet_link(
 }
 
 pub fn create_vnic_link(
-    name: &String,
+    name: &str,
     link: u32,
     flags: LinkFlags,
 ) -> Result<LinkInfo, Error> {
@@ -436,7 +428,7 @@ pub struct DlmgmtGetLinkId {
     pub name: [u8; crate::sys::MAXLINKNAMELEN as usize],
 }
 
-pub fn linkname_to_id(name: &String) -> Result<u32, Error> {
+pub fn linkname_to_id(name: &str) -> Result<u32, Error> {
     let mut request = DlmgmtGetLinkId {
         cmd: DlmgmtCmd::GetLinkId,
         name: [0; crate::sys::MAXLINKNAMELEN as usize],
@@ -514,12 +506,11 @@ pub struct DlmgmtDoorCreateId {
 }
 
 fn dlmgmt_door_fd() -> Result<File, Error> {
-    File::open("/etc/svc/volatile/dladm/dlmgmt_door")
-        .map_err(|e| Error::File(e))
+    File::open("/etc/svc/volatile/dladm/dlmgmt_door").map_err(Error::File)
 }
 
 pub(crate) fn create_link_id(
-    name: &String,
+    name: &str,
     class: LinkClass,
     flags: LinkFlags,
 ) -> Result<u32, Error> {
@@ -538,7 +529,7 @@ pub(crate) fn create_link_id(
 
     let request = DlmgmtDoorCreateId {
         cmd: crate::link::DlmgmtCmd::CreateLinkId as u32,
-        link: link,
+        link,
         class: class as u32,
         media: crate::sys::DL_ETHER,
         prefix: Bool::False,
@@ -568,7 +559,7 @@ pub(crate) fn delete_link_id(id: u32, flags: LinkFlags) -> Result<(), Error> {
 
     let request = DlmgmtDoorDestroyId {
         cmd: crate::link::DlmgmtCmd::DestroyLinkId as u32,
-        id: id,
+        id,
         flags: flags as u32,
     };
 

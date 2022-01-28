@@ -22,6 +22,7 @@ ptime -m cargo build
 ptime -m cargo build --release
 
 cargo fmt -- --check
+cargo clippy
 
 banner test
 ptime -m cargo test

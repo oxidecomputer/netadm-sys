@@ -26,7 +26,7 @@ struct Msg {
 impl Msg {
     fn new(cmd: Cmd) -> Self {
         Msg {
-            cmd: cmd,
+            cmd,
             ifname: [0; sys::LIFNAMSIZ],
             intfid: libc::sockaddr_in6 {
                 sin6_family: 0,

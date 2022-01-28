@@ -137,3 +137,18 @@ fact, the opportunity for distribution increases with `libnet` phase 2, as the
 small collection of centralized deamons gives way to to a library built to
 support decentralized and distributed participants that coordinate through IPC
 synchronization primitives without any active centralized entity.
+
+## Contributing
+
+### Basic Checks
+
+```
+cargo fmt -- --check
+cargo clippy
+```
+
+### Testing
+
+```
+cargo test
+```

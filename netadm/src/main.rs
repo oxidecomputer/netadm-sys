@@ -248,40 +248,40 @@ fn main() {
     let opts: Opts = Opts::parse();
     match opts.subcmd {
         SubCommand::Show(ref s) => match s.subcmd {
-            ShowSubCommand::Links(ref l) => match show_links(&opts, &s, &l) {
+            ShowSubCommand::Links(ref l) => match show_links(&opts, s, l) {
                 Ok(()) => {}
                 Err(e) => error!("{}", e),
             },
-            ShowSubCommand::Addrs(ref a) => match show_addrs(&opts, &s, &a) {
+            ShowSubCommand::Addrs(ref a) => match show_addrs(&opts, s, a) {
                 Ok(()) => {}
                 Err(e) => error!("{}", e),
             },
-            ShowSubCommand::Routes(ref r) => match show_routes(&opts, &s, &r) {
+            ShowSubCommand::Routes(ref r) => match show_routes(&opts, s, r) {
                 Ok(()) => {}
                 Err(e) => error!("{}", e),
             },
         },
         SubCommand::Create(ref c) => match c.subcmd {
             CreateSubCommand::Simnet(ref sim) => {
-                match create_simnet(&opts, &c, &sim) {
+                match create_simnet(&opts, c, sim) {
                     Ok(()) => {}
                     Err(e) => error!("{}", e),
                 }
             }
             CreateSubCommand::Vnic(ref vnic) => {
-                match create_vnic(&opts, &c, &vnic) {
+                match create_vnic(&opts, c, vnic) {
                     Ok(()) => {}
                     Err(e) => error!("{}", e),
                 }
             }
             CreateSubCommand::Addr(ref addr) => {
-                match create_addr(&opts, &c, &addr) {
+                match create_addr(&opts, c, addr) {
                     Ok(()) => {}
                     Err(e) => error!("{}", e),
                 }
             }
             CreateSubCommand::Route(ref route) => {
-                match create_route(&opts, &c, &route) {
+                match create_route(&opts, c, route) {
                     Ok(()) => {}
                     Err(e) => error!("{}", e),
                 }
@@ -289,19 +289,19 @@ fn main() {
         },
         SubCommand::Delete(ref d) => match d.subcmd {
             DeleteSubCommand::Link(ref lnk) => {
-                match delete_link(&opts, &d, &lnk) {
+                match delete_link(&opts, d, lnk) {
                     Ok(()) => {}
                     Err(e) => error!("{}", e),
                 }
             }
             DeleteSubCommand::Addr(ref addr) => {
-                match delete_addr(&opts, &d, &addr) {
+                match delete_addr(&opts, d, addr) {
                     Ok(()) => {}
                     Err(e) => error!("{}", e),
                 }
             }
             DeleteSubCommand::Route(ref route) => {
-                match delete_route(&opts, &d, &route) {
+                match delete_route(&opts, d, route) {
                     Ok(()) => {}
                     Err(e) => error!("{}", e),
                 }
@@ -309,19 +309,19 @@ fn main() {
         },
         SubCommand::Enable(ref e) => match e.subcmd {
             EnableSubCommand::V4(ref cmd) => {
-                match enable_v4_function(&opts, &e, &cmd) {
+                match enable_v4_function(&opts, e, cmd) {
                     Ok(()) => {}
                     Err(e) => error!("{}", e),
                 }
             }
             EnableSubCommand::V6(ref cmd) => {
-                match enable_v6_function(&opts, &e, &cmd) {
+                match enable_v6_function(&opts, e, cmd) {
                     Ok(()) => {}
                     Err(e) => error!("{}", e),
                 }
             }
         },
-        SubCommand::Connect(ref c) => match connect_simnet_peers(&opts, &c) {
+        SubCommand::Connect(ref c) => match connect_simnet_peers(&opts, c) {
             Ok(()) => {}
             Err(e) => error!("{}", e),
         },
@@ -390,9 +390,9 @@ fn enable_v6_function(
 fn show_links(_opts: &Opts, _s: &Show, _l: &ShowLinks) -> Result<()> {
     let mut tw = TabWriter::new(stdout());
 
-    write!(
+    writeln!(
         &mut tw,
-        "{}\t{}\t{}\t{}\t{}\t{}\n",
+        "{}\t{}\t{}\t{}\t{}\t{}",
         "Id".dimmed(),
         "Name".dimmed(),
         "Flags".dimmed(),
@@ -400,9 +400,9 @@ fn show_links(_opts: &Opts, _s: &Show, _l: &ShowLinks) -> Result<()> {
         "State".dimmed(),
         "MAC".dimmed(),
     )?;
-    write!(
+    writeln!(
         &mut tw,
-        "{}\t{}\t{}\t{}\t{}\t{}\n",
+        "{}\t{}\t{}\t{}\t{}\t{}",
         "--".bright_black(),
         "----".bright_black(),
         "-----".bright_black(),
@@ -415,16 +415,13 @@ fn show_links(_opts: &Opts, _s: &Show, _l: &ShowLinks) -> Result<()> {
     for l in links.iter() {
         let mut name = l.name.clone();
         if l.over != 0 {
-            match get_link(l.over) {
-                Ok(info) => {
-                    name = format!(
-                        "{}{}{}",
-                        name,
-                        "|".bright_black(),
-                        info.name.bright_black(),
-                    );
-                }
-                _ => {}
+            if let Ok(info) = get_link(l.over) {
+                name = format!(
+                    "{}{}{}",
+                    name,
+                    "|".bright_black(),
+                    info.name.bright_black(),
+                );
             }
         }
 
@@ -433,9 +430,9 @@ fn show_links(_opts: &Opts, _s: &Show, _l: &ShowLinks) -> Result<()> {
             l.mac[0], l.mac[1], l.mac[2], l.mac[3], l.mac[4], l.mac[5],
         );
 
-        write!(
+        writeln!(
             &mut tw,
-            "{}\t{}\t{}\t{}\t{}\t{}\n",
+            "{}\t{}\t{}\t{}\t{}\t{}",
             l.id, name, l.flags, l.class, l.state, macf,
         )?;
     }
@@ -446,18 +443,18 @@ fn show_links(_opts: &Opts, _s: &Show, _l: &ShowLinks) -> Result<()> {
 
 fn show_addrs(_opts: &Opts, _s: &Show, a: &ShowAddrs) -> Result<()> {
     let mut tw = TabWriter::new(stdout());
-    write!(
+    writeln!(
         &mut tw,
-        "{}\t{}\t{}\t{}\t{}\n",
+        "{}\t{}\t{}\t{}\t{}",
         "Name".dimmed(),
         "Type".dimmed(),
         "State".dimmed(),
         "Address".dimmed(),
         "Interface Index".dimmed(),
     )?;
-    write!(
+    writeln!(
         &mut tw,
-        "{}\t{}\t{}\t{}\t{}\n",
+        "{}\t{}\t{}\t{}\t{}",
         "--".bright_black(),
         "------".bright_black(),
         "-----".bright_black(),
@@ -472,9 +469,9 @@ fn show_addrs(_opts: &Opts, _s: &Show, a: &ShowAddrs) -> Result<()> {
 
         let (addrobj, src, _, _, _) =
             ip::addrobjname_to_addrobj(name).map_err(|e| anyhow!("{}", e))?;
-        write!(
+        writeln!(
             &mut tw,
-            "{}\t{}\t{}\t{}/{}\t{}\n",
+            "{}\t{}\t{}\t{}/{}\t{}",
             addrobj,
             src,
             color_state(&addr.state),
@@ -500,9 +497,9 @@ fn show_addrs(_opts: &Opts, _s: &Show, a: &ShowAddrs) -> Result<()> {
                 continue;
             }
 
-            write!(
+            writeln!(
                 &mut tw,
-                "{}\t{}\t{}\t{}/{}\t{}\n",
+                "{}\t{}\t{}\t{}/{}\t{}",
                 addrobj,
                 src,
                 color_state(&addr.state),
@@ -522,23 +519,23 @@ fn show_routes(_opts: &Opts, _s: &Show, _r: &ShowRoutes) -> Result<()> {
     let routes = route::get_routes()?;
 
     let mut tw = TabWriter::new(stdout());
-    write!(
+    writeln!(
         &mut tw,
-        "{}\t{}\n",
+        "{}\t{}",
         "Destination".dimmed(),
         "Gateway".dimmed(),
     )?;
-    write!(
+    writeln!(
         &mut tw,
-        "{}\t{}\n",
+        "{}\t{}",
         "-----------".bright_black(),
         "-------".bright_black(),
     )?;
 
     for r in routes.iter() {
-        write!(
+        writeln!(
             &mut tw,
-            "{}/{}\t{}\n",
+            "{}/{}\t{}",
             color_ip(r.dest),
             r.mask,
             color_ip(r.gw),
