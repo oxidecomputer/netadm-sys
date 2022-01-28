@@ -1,43 +1,26 @@
 // Copyright 2021 Oxide Computer Company
 
-use crate::sys::{
-    self,
-    dld_ioc_macaddrget_t,
-    dld_macaddrinfo_t,
-    DLDIOC_MACADDRGET,
-    SIMNET_IOC_INFO,
-    SIMNET_IOC_MODIFY,
-};
-use libc::{
-    ioctl,
-    close,
-    socket,
-    sockaddr_in,
-    sockaddr_in6,
-    sockaddr_storage,
-    AF_INET,
-    AF_INET6,
-    AF_UNSPEC,
-    SOCK_DGRAM,
-};
 use crate::ip;
-use crate::{
-    IpInfo,
-    IpState,
-    LinkFlags,
-    Error,
-    IpPrefix,
+use crate::sys::{
+    self, dld_ioc_macaddrget_t, dld_macaddrinfo_t, DLDIOC_MACADDRGET,
+    SIMNET_IOC_INFO, SIMNET_IOC_MODIFY,
 };
+use crate::{Error, IpInfo, IpPrefix, IpState, LinkFlags};
+use libc::{
+    close, ioctl, sockaddr_in, sockaddr_in6, sockaddr_storage, socket, AF_INET,
+    AF_INET6, AF_UNSPEC, SOCK_DGRAM,
+};
+use libc::{free, malloc};
+use rusty_doors::{door_call_slice, door_callp};
 use std::collections::BTreeMap;
 use std::ffi::CStr;
 use std::fs::File;
 use std::mem::size_of;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::os::raw::{c_char, c_int, c_void};
 use std::os::unix::io::AsRawFd;
+use std::ptr;
 use tracing::{debug, warn};
-use libc::{malloc, free};
-use std::os::raw::{c_char, c_void};
-use rusty_doors::{door_callp, door_call_slice};
 
 #[repr(C)]
 struct GetMacAddrIoc {
@@ -50,7 +33,7 @@ fn dld_fd() -> Result<File, Error> {
         .read(true)
         .write(true)
         .open("/dev/dld")
-        .map_err(|e| Error::File(e))
+        .map_err(Error::File)
 }
 
 #[repr(C)]
@@ -75,7 +58,7 @@ pub(crate) fn get_simnet_info(link_id: u32) -> Result<SimnetInfoIoc, Error> {
 
     unsafe {
         let arg = SimnetInfoIoc {
-            link_id: link_id,
+            link_id,
             peer_link_id: 0,
             typ: 0,
             mac_len: 0,
@@ -90,14 +73,16 @@ pub(crate) fn get_simnet_info(link_id: u32) -> Result<SimnetInfoIoc, Error> {
     }
 }
 
-pub(crate) fn connect_simnet_peers(link_id: u32, peer_link_id: u32)
--> Result<(), Error> {
+pub(crate) fn connect_simnet_peers(
+    link_id: u32,
+    peer_link_id: u32,
+) -> Result<(), Error> {
     let fd = dld_fd()?;
 
     unsafe {
         let arg = SimnetModifyIoc {
-            link_id: link_id,
-            peer_link_id: peer_link_id,
+            link_id,
+            peer_link_id,
             flags: 0,
         };
         let ret = ioctl(fd.as_raw_fd(), SIMNET_IOC_MODIFY, &arg);
@@ -376,11 +361,9 @@ pub(crate) fn get_macaddr(linkid: u32) -> Result<[u8; 6], Error> {
 
         let mut res: [u8; 6] = [0; 6];
 
-        for i in 0..6 {
-            res[i] = arg.info.dmi_addr[i];
-        }
+        res[..6].clone_from_slice(&arg.info.dmi_addr[..6]);
 
-        return Ok(res);
+        Ok(res)
     }
 }
 
@@ -418,15 +401,7 @@ pub(crate) fn get_ipaddrs() -> Result<BTreeMap<String, Vec<IpInfo>>, Error> {
         // get interfaces
 
         let mut ifs: Vec<sys::lifreq> = Vec::new();
-        ifs.resize(
-            lifn.lifn_count as usize,
-            sys::lifreq {
-                lifr_name: [0; 32usize],
-                lifr_lifru1: sys::lifreq_ru1 { lifru_ppa: 0 },
-                lifr_type: 0,
-                lifr_lifru: sys::lifreq_ru { lifru_flags: 0 },
-            },
-        );
+        ifs.resize(lifn.lifn_count as usize, sys::lifreq::new());
 
         let lifc = sys::lifconf {
             lifc_family: AF_UNSPEC as u16,
@@ -448,112 +423,20 @@ pub(crate) fn get_ipaddrs() -> Result<BTreeMap<String, Vec<IpInfo>>, Error> {
         }
 
         for x in ifs.iter() {
-            let _name = CStr::from_ptr(x.lifr_name.as_ptr());
-            let name = match _name.to_str() {
-                Ok(s) => s,
-                Err(_) => {
-                    close(s4);
-                    close(s6);
-                    return Err(Error::Ioctl(
-                            "interface name conversion".to_string()));
+            let info = match ipaddr_info(x, s4, s6) {
+                Ok(info) => info,
+                Err(e) => {
+                    warn!("{:?}", e);
+                    continue;
                 }
             };
 
-            let sa = x.lifr_lifru.lifru_addr;
-            let addr = match sockaddr2ipaddr(&sa) {
-                Some(addr) => addr,
-                None => continue,
-            };
-
-            let ss = match sa.ss_family as i32 {
-                AF_INET => s4,
-                AF_INET6 => s6,
-                _ => continue,
-            };
-
-            // get index
-            ret = ioctl(ss, sys::SIOCGLIFINDEX, x);
-            if ret != 0 {
-                close(s4);
-                close(s6);
-                return Err(Error::Ioctl("ioctl SIOCGLIFINDEX".to_string()));
-            }
-            let idx = x.lifr_lifru.lifru_index;
-
-            // get netmask
-
-            ret = ioctl(ss, sys::SIOCGLIFNETMASK, x);
-            if ret != 0 {
-                close(s4);
-                close(s6);
-                return Err(Error::Ioctl("ioctl SIOCGLIFNETMASK".to_string()));
-            }
-            let _mask = x.lifr_lifru.lifru_addr;
-            let mask = match sockaddr2ipaddr(&_mask) {
-                Some(mask) => mask,
-                None => continue,
-            };
-
-            // determine state
-
-            ret = ioctl(ss, sys::SIOCGLIFFLAGS, x);
-            if ret != 0 {
-                close(s4);
-                close(s6);
-                return Err(Error::Ioctl("ioctl SIOCGLIFFLAGS".to_string()));
-            }
-            let flags = x.lifr_lifru.lifru_flags;
-            let state = {
-                if flags & sys::IFF_UP as u64 != 0 {
-                    IpState::OK
-                } else {
-                    if flags & sys::IFF_RUNNING as u64 != 0 {
-                        ret = ioctl(ss, sys::SIOCGLIFDADSTATE, x);
-                        if ret != 0 {
-                            close(s4);
-                            close(s6);
-                            return Err(Error::Ioctl(
-                                    "ioctl SIOCGLIFFLAGS".to_string()));
-                        }
-
-                        if x.lifr_lifru.lifru_dadstate ==
-                            sys::glif_dad_state_t_DAD_IN_PROGRESS {
-                            IpState::Tentative
-                        } else {
-                            IpState::OK
-                        }
-                    } else {
-                        IpState::Inaccessible
-                    }
-                }
-            };
-
-            let name_s = name.to_string();
-            match result.get_mut(&name_s) {
+            match result.get_mut(&info.ifname) {
                 None => {
-                    result.insert(
-                        name_s,
-                        vec![IpInfo {
-                            ifname: name.to_string(),
-                            index: idx,
-                            addr: addr,
-                            mask: ip_mask(mask),
-                            family: sa.ss_family,
-                            state: state,
-                        }],
-                    );
+                    result.insert(info.ifname.clone(), vec![info]);
                 }
-                Some(v) => {
-                    v.push(IpInfo {
-                        ifname: name.to_string(),
-                        index: idx,
-                        addr: addr,
-                        mask: ip_mask(mask),
-                        family: sa.ss_family,
-                        state: state,
-                    });
-                }
-            }
+                Some(v) => v.push(info),
+            };
         }
 
         close(s4);
@@ -563,10 +446,7 @@ pub(crate) fn get_ipaddrs() -> Result<BTreeMap<String, Vec<IpInfo>>, Error> {
     Ok(result)
 }
 
-pub(crate) fn ipaddr_exists(
-    objname: impl AsRef<str>,
-) -> Result<bool, Error> {
-
+pub(crate) fn ipaddr_exists(objname: impl AsRef<str>) -> Result<bool, Error> {
     let f = File::open("/etc/svc/volatile/ipadm/ipmgmt_door")?;
 
     // get address info
@@ -577,14 +457,14 @@ pub(crate) fn ipaddr_exists(
     }
 
     let mut response: *mut ip::IpmgmtAobjopRval = unsafe {
-            malloc(std::mem::size_of::<ip::IpmgmtAobjopRval>())
-                as *mut ip::IpmgmtAobjopRval
+        malloc(std::mem::size_of::<ip::IpmgmtAobjopRval>())
+            as *mut ip::IpmgmtAobjopRval
     };
 
     let respp: *mut ip::IpmgmtAobjopRval = door_callp(
         f.as_raw_fd(),
         req,
-        &mut response,
+        ptr::NonNull::new(&mut response).unwrap(), // null not possible
     );
     let resp = unsafe { *respp };
     if resp.err != 0 {
@@ -600,16 +480,11 @@ pub(crate) fn ipaddr_exists(
         return Ok(false);
     }
 
-
-    return Ok(true);
-
+    Ok(true)
 }
 
-// TODO this is not completely deleting the address, a reference is still
-// hanging out in ipmgmtd, look to see what ipadm is doing here ....
-pub(crate) fn delete_ipaddr(
-    objname: impl AsRef<str>,
-) -> Result<(), Error> {
+pub(crate) fn delete_ipaddr(objname: impl AsRef<str>) -> Result<(), Error> {
+    let ifname = objname.as_ref().split('/').collect::<Vec<&str>>()[0];
 
     let f = File::open("/etc/svc/volatile/ipadm/ipmgmt_door")?;
 
@@ -621,14 +496,14 @@ pub(crate) fn delete_ipaddr(
     }
 
     let mut response: *mut ip::IpmgmtAobjopRval = unsafe {
-            malloc(std::mem::size_of::<ip::IpmgmtAobjopRval>()) 
-                as *mut ip::IpmgmtAobjopRval
+        malloc(std::mem::size_of::<ip::IpmgmtAobjopRval>())
+            as *mut ip::IpmgmtAobjopRval
     };
 
     let respp: *mut ip::IpmgmtAobjopRval = door_callp(
         f.as_raw_fd(),
         req,
-        &mut response,
+        ptr::NonNull::new(&mut response).unwrap(), // null not possible
     );
     let resp = unsafe { *respp };
     if resp.err != 0 {
@@ -643,53 +518,86 @@ pub(crate) fn delete_ipaddr(
             break;
         }
         ior.lifr_name[i] = c;
-        i+=1;
+        i += 1;
     }
     if resp.lnum != 0 {
         ior.lifr_name[i] = ':' as i8;
-        i+=1;
+        i += 1;
         for c in resp.lnum.to_string().chars() {
             ior.lifr_name[i] = c as i8;
-            i+=1;
+            i += 1;
         }
     }
 
+    let kname =
+        unsafe { std::ffi::CStr::from_ptr(&ior.lifr_name[0]).to_str()? };
+    println!("deleting {}", kname);
+
     let sock = match resp.family as i32 {
         libc::AF_INET => {
-            let s4 = unsafe{ socket(AF_INET as i32, SOCK_DGRAM as i32, 0) };
+            let s4 = unsafe { socket(AF_INET as i32, SOCK_DGRAM as i32, 0) };
             if s4 < 0 {
                 return Err(Error::Ioctl("socket 4".to_string()));
             }
             s4
         }
         libc::AF_INET6 => {
-            let s6 = unsafe{ socket(AF_INET6 as i32, SOCK_DGRAM as i32, 0) };
+            if resp.lnum == 0 {
+                match crate::ndpd::delete_addrs(ifname) {
+                    Ok(_) => {}
+                    Err(e) => println!("ndp delete addrs: {}", e.to_string()),
+                };
+            }
+
+            let s6 = unsafe { socket(AF_INET6 as i32, SOCK_DGRAM as i32, 0) };
             if s6 < 0 {
                 return Err(Error::Ioctl("socket 6".to_string()));
             }
             s6
         }
         _ => {
-            return Err(Error::BadArgument(
-                    format!("unknown address family: {}", resp.family)));
+            return Err(Error::BadArgument(format!(
+                "unknown address family: {}",
+                resp.family
+            )));
         }
     };
 
     if resp.lnum == 0 {
-        let ret = unsafe{ ioctl(sock, sys::SIOCSLIFADDR, &ior) };
-        if ret != 0 {
-            unsafe{ close(sock) };
-            return Err(Error::Ioctl("ioctl SIOCSLIFADDR".to_string()));
+        unsafe { ior.lifr_lifru.lifru_flags &= !(sys::IFF_UP as u64) };
+        let ret = unsafe { ioctl(sock, sys::SIOCSLIFFLAGS, &ior) };
+        if ret < 0 {
+            unsafe { close(sock) };
+            return Err(Error::Ioctl(format!(
+                "ioctl SIOCSLIFFLAGS: {}",
+                sys::errno_string()
+            )));
         }
-    } else  {
-        let ret = unsafe{ ioctl(sock, sys::SIOCLIFREMOVEIF, &ior) };
+
+        unsafe {
+            let sin6 = &mut ior.lifr_lifru.lifru_addr as *mut sockaddr_storage
+                as *mut sockaddr_in6;
+            (*sin6).sin6_family = AF_INET6 as u16;
+            (*sin6).sin6_addr.s6_addr = [0u8; 16];
+        }
+
+        let ret = unsafe { ioctl(sock, sys::SIOCSLIFADDR, &ior) };
         if ret != 0 {
-            unsafe{ close(sock) };
+            unsafe { close(sock) };
+            return Err(Error::Ioctl(format!(
+                "ioctl SIOCSLIFADDR : {}",
+                sys::errno_string()
+            )));
+        }
+    } else {
+        let ret = unsafe { ioctl(sock, sys::SIOCLIFREMOVEIF, &ior) };
+        if ret != 0 {
+            unsafe { close(sock) };
             return Err(Error::Ioctl("ioctl SIOCLIFREMOVEIF".to_string()));
         }
     }
 
-    let mut ia: ip::IpmgmtAddrArg = unsafe{ std::mem::zeroed() };
+    let mut ia: ip::IpmgmtAddrArg = unsafe { std::mem::zeroed() };
     ia.cmd = ip::IpmgmtCmd::ResetAddr;
     ia.flags = sys::IPMGMT_ACTIVE;
     ia.lnum = resp.lnum as u32;
@@ -699,103 +607,633 @@ pub(crate) fn delete_ipaddr(
 
     // delete the address from ipmgmtd
     unsafe {
-        let mut response: *mut ip::IpmgmtRval = malloc(std::mem::size_of::<
-            ip::IpmgmtRval,
-            >()) as *mut ip::IpmgmtRval;
-        let resp: *mut ip::IpmgmtRval = door_callp(f.as_raw_fd(), ia, &mut response);
+        let mut response: *mut ip::IpmgmtRval =
+            malloc(std::mem::size_of::<ip::IpmgmtRval>())
+                as *mut ip::IpmgmtRval;
+
+        let resp: *mut ip::IpmgmtRval = door_callp(
+            f.as_raw_fd(),
+            ia,
+            ptr::NonNull::new(&mut response).unwrap(), // null not possible
+        );
+
         if (*resp).err != 0 {
             free(response as *mut c_void);
             close(sock);
-            return Err(Error::Ipmgmtd(
-                    format!("reset address: {}", sys::err_string((*resp).err))
-            ));
+            return Err(Error::Ipmgmtd(format!(
+                "reset address: {}",
+                sys::err_string((*resp).err)
+            )));
         }
         free(response as *mut c_void);
         close(sock);
     }
 
     Ok(())
-
 }
-
 
 //TODO check auth?
 pub(crate) fn create_ipaddr(
     name: impl AsRef<str>,
     addr: IpPrefix,
 ) -> Result<(), Error> {
-
-    let parts: Vec<&str> = name.as_ref().split("/").collect();
+    let parts: Vec<&str> = name.as_ref().split('/').collect();
     if parts.len() < 2 {
-        return Err(Error::BadArgument("Expected <ifname>/<addrname>".to_string()));
+        return Err(Error::BadArgument(
+            "Expected <ifname>/<addrname>".to_string(),
+        ));
     }
     let ifname = parts[0];
 
-    let sock = match addr {
+    let (iff, sock) = match addr {
         IpPrefix::V4(_) => {
-            let s4 = unsafe{ socket(AF_INET as i32, SOCK_DGRAM as i32, 0) };
+            let s4 = unsafe { socket(AF_INET as i32, SOCK_DGRAM as i32, 0) };
             if s4 < 0 {
                 return Err(Error::Ioctl("socket 4".to_string()));
             }
-            s4
+            (sys::IFF_IPV4.into(), s4)
         }
         IpPrefix::V6(_) => {
-            let s6 = unsafe{ socket(AF_INET6 as i32, SOCK_DGRAM as i32, 0) };
+            let s6 = unsafe { socket(AF_INET6 as i32, SOCK_DGRAM as i32, 0) };
             if s6 < 0 {
                 return Err(Error::Ioctl("socket 6".to_string()));
             }
-            s6
+            (sys::IFF_IPV6.into(), s6)
         }
     };
 
-    create_ip_addr(ifname, name.as_ref(), addr, sock)?;
+    match is_plumbed_for_af(ifname, sock) {
+        true => {}
+        false => {
+            plumb_for_af(ifname, iff)?;
+        }
+    };
+
+    create_ip_addr_static(ifname, name.as_ref(), addr, sock)
+}
+
+fn is_plumbed_for_af(name: &str, sock: i32) -> bool {
+    let mut req = crate::sys::lifreq::new();
+    for (i, c) in name.chars().enumerate() {
+        req.lifr_name[i] = c as i8
+    }
+    let ret = unsafe { ioctl(sock, sys::SIOCGLIFFLAGS, &req) };
+    ret == 0
+}
+
+fn plumb_for_af(name: &str, ifflags: u64) -> Result<(), Error> {
+    // TODO not handling interfaces assigned to different zones correctly.
+    // TODO not handling loopback as special case like libipadm does
+
+    println!("opening {}", name);
+
+    let ip_h = match dlpi::open(name, dlpi::sys::DLPI_NOATTACH) {
+        Ok(h) => h,
+        Err(e) => {
+            return Err(Error::Ioctl(format!(
+                "DLPI open: {}: {}",
+                e.to_string(),
+                sys::errno_string()
+            )));
+        }
+    };
+    let ip_fd = match dlpi::fd(ip_h) {
+        Ok(fd) => fd,
+        Err(e) => {
+            dlpi::close(ip_h);
+            return Err(Error::Ioctl(format!("DLPI IP fd: {}", e.to_string())));
+        }
+    };
+
+    // push ip module
+    let ip_mod_name = CStr::from_bytes_with_nul(sys::IP_MOD_NAME).unwrap();
+    if unsafe { ioctl(ip_fd, sys::I_PUSH, ip_mod_name.as_ptr()) } == -1 {
+        dlpi::close(ip_h);
+        return Err(Error::Ioctl("IP streams push error".to_string()));
+    }
+
+    let spec = parse_ifspec(name);
+
+    // create the new interface via SIOCSLIFNAME
+    let ifflags = ifflags | sys::IFF_NOLINKLOCAL;
+    let mut req = sys::lifreq::new();
+    req.lifr_lifru.lifru_flags = ifflags;
+    req.lifr_lifru1.lifru_ppa = spec.ppa;
+
+    for (i, c) in name.chars().enumerate() {
+        req.lifr_name[i] = c as i8;
+    }
+    if unsafe { ioctl(ip_fd, sys::SIOCSLIFNAME, &req) } == -1 {
+        dlpi::close(ip_h);
+        return Err(Error::Ioctl(format!(
+            "IP SIOCSLIFNAME, {}, {}",
+            ip_fd,
+            sys::errno_string(),
+        )));
+    }
+
+    // get flags for the interface
+    if unsafe { ioctl(ip_fd, sys::SIOCGLIFFLAGS, &req) } == -1 {
+        dlpi::close(ip_h);
+        return Err(Error::Ioctl("IP SIOCGLIFNAME".to_string()));
+    }
+
+    let mux_fd = if (ifflags & (sys::IFF_IPV6 as u64)) != 0 {
+        let dev = b"/dev/udp6\0";
+        let devname = CStr::from_bytes_with_nul(dev).unwrap();
+        unsafe { libc::open(devname.as_ptr(), libc::O_RDWR) }
+    } else {
+        let dev = b"/dev/udp\0";
+        let devname = CStr::from_bytes_with_nul(dev).unwrap();
+        unsafe { libc::open(devname.as_ptr(), libc::O_RDWR) }
+    };
+
+    // pop off unwanted modules
+    loop {
+        let res = unsafe { ioctl(mux_fd, sys::I_POP, 0) };
+        if res == -1 {
+            break;
+        }
+    }
+
+    // push on arp module
+    let arp_mod_name = CStr::from_bytes_with_nul(sys::ARP_MOD_NAME).unwrap();
+    if unsafe { ioctl(mux_fd, sys::I_PUSH, arp_mod_name) } == -1 {
+        dlpi::close(ip_h);
+        return Err(Error::Ioctl("ARP sterams push error".to_string()));
+    }
+
+    // check if ARP is not needed
+    if (ifflags & ((sys::IFF_NOARP | sys::IFF_IPV6) as u64)) != 0 {
+        let ip_muxid = unsafe { ioctl(mux_fd, sys::I_PLINK, ip_fd) };
+        if ip_muxid == -1 {
+            dlpi::close(ip_h);
+            unsafe { ioctl(mux_fd, sys::I_PUNLINK, ip_muxid) };
+            return Err(Error::Ioctl(format!(
+                "PLINK IP, {}, {}, {}",
+                mux_fd,
+                ip_fd,
+                sys::errno_string(),
+            )));
+        }
+
+        // TODO check
+        unsafe {
+            libc::close(mux_fd);
+        }
+        dlpi::close(ip_h);
+
+        crate::ndpd::disable_autoconf(name).map_err(|e| {
+            Error::Ioctl(format!("ndp disable: {}", e.to_string()))
+        })?;
+        return Ok(());
+    }
+
+    // open arp dlpi
+    let arp_h = match dlpi::open(name, dlpi::sys::DLPI_NOATTACH) {
+        Ok(h) => h,
+        Err(e) => {
+            dlpi::close(ip_h);
+            return Err(Error::Ioctl(format!(
+                "DLPI ARP open: {}",
+                e.to_string()
+            )));
+        }
+    };
+
+    let arp_fd = match dlpi::fd(arp_h) {
+        Ok(fd) => fd,
+        Err(e) => {
+            dlpi::close(ip_h);
+            return Err(Error::Ioctl(format!(
+                "DLPI ARP fd: {}",
+                e.to_string()
+            )));
+        }
+    };
+
+    let arg = &mut req as *mut sys::lifreq as *mut c_char;
+    let ret = str_ioctl(
+        arp_fd,
+        sys::SIOCSLIFNAME,
+        arg,
+        size_of::<sys::lifreq>() as c_int,
+    );
+    if ret == -1 {
+        dlpi::close(ip_h);
+        dlpi::close(arp_h);
+        return Err(Error::Ioctl("ARP SIOCSLIFNAME".to_string()));
+    }
+
+    // plink IP and arp streams
+
+    let ip_muxid = unsafe { ioctl(mux_fd, sys::I_PLINK, ip_fd) };
+    if ip_muxid == -1 {
+        dlpi::close(ip_h);
+        dlpi::close(arp_h);
+        return Err(Error::Ioctl("PLINK ip_fd".to_string()));
+    }
+
+    let ret = unsafe { ioctl(mux_fd, sys::I_PLINK, arp_fd) };
+    if ret == -1 {
+        dlpi::close(ip_h);
+        dlpi::close(arp_h);
+        return Err(Error::Ioctl("PLINK arp_fd".to_string()));
+    }
+
+    dlpi::close(ip_h);
+    dlpi::close(arp_h);
+
+    crate::ndpd::disable_autoconf(name)
+        .map_err(|e| Error::Ioctl(format!("ndp disable: {}", e.to_string())))?;
 
     Ok(())
+}
 
+fn str_ioctl(s: c_int, cmd: c_int, buf: *mut c_char, buflen: c_int) -> c_int {
+    let mut ioc = sys::strioctl::new();
+    ioc.ic_cmd = cmd;
+    ioc.ic_len = buflen;
+    ioc.ic_dp = buf;
+
+    unsafe { ioctl(s, sys::I_STR, &ioc) }
+}
+
+pub struct IfSpec {
+    pub ppa: u32,
+    pub lun: u32,
+    pub lunvalid: bool,
+    pub devnm: [u8; sys::LIFNAMSIZ],
+}
+
+/// Parse a interface specification with the following format.
+///
+/// <name>[ppa][:lun]
+///
+/// - name: name of the device
+/// - ppa: physical point of attachment (integer)
+/// - lun: logical unit numnber (integer)
+fn parse_ifspec(ifname: &str) -> IfSpec {
+    let parts: Vec<&str> = ifname.split(':').collect();
+    let (lun, lunvalid) = {
+        match parts.len() {
+            0 => (0, false),
+            1 => (0, false),
+            _ => match parts[1].parse::<u32>() {
+                Ok(i) => (i, true),
+                Err(_) => (0, false),
+            },
+        }
+    };
+    let name = parts[0].trim_end_matches(char::is_numeric);
+    let ppa = {
+        let s = &parts[0][..name.len()];
+        s.parse::<u32>().unwrap_or(0)
+    };
+
+    let mut devnm = [0u8; sys::LIFNAMSIZ];
+    for (i, c) in name.chars().enumerate() {
+        devnm[i] = c as u8;
+    }
+
+    IfSpec {
+        ppa,
+        lun,
+        lunvalid,
+        devnm,
+    }
+}
+
+pub fn get_ipaddr_info(name: &str) -> Result<IpInfo, Error> {
+    unsafe {
+        let (_, _, af, ifname, _) = crate::ip::addrobjname_to_addrobj(name)
+            .map_err(|e| Error::Ioctl(format!("get addrobj: {}", e)))?;
+
+        let s4 = socket(AF_INET as i32, SOCK_DGRAM as i32, 0);
+        if s4 < 0 {
+            return Err(Error::Ioctl("socket 4".to_string()));
+        }
+        let s6 = socket(AF_INET6 as i32, SOCK_DGRAM as i32, 0);
+        if s6 < 0 {
+            close(s4);
+            return Err(Error::Ioctl("socket 6".to_string()));
+        }
+
+        let ss = match af as i32 {
+            libc::AF_INET => s4,
+            libc::AF_INET6 => s6,
+            _ => {
+                return Err(Error::Ioctl(format!(
+                    "unknown address family: {}",
+                    af
+                )))
+            }
+        };
+
+        let mut req = sys::lifreq::new();
+        for (i, c) in ifname.chars().enumerate() {
+            req.lifr_name[i] = c as i8;
+        }
+
+        // get addr
+        let ret = ioctl(ss, sys::SIOCGLIFADDR, &req);
+        if ret != 0 {
+            close(s4);
+            close(s6);
+            return Err(Error::Ioctl("ioctl SIOCGLIFADDr".to_string()));
+        }
+
+        ipaddr_info(&req, s4, s6)
+    }
+}
+
+unsafe fn ipaddr_info(
+    x: &sys::lifreq,
+    s4: i32,
+    s6: i32,
+) -> Result<IpInfo, Error> {
+    let _name = CStr::from_ptr(x.lifr_name.as_ptr());
+    let name = match _name.to_str() {
+        Ok(s) => s,
+        Err(_) => {
+            close(s4);
+            close(s6);
+            return Err(Error::Ioctl("interface name conversion".to_string()));
+        }
+    };
+
+    let sa = x.lifr_lifru.lifru_addr;
+    let addr = match sockaddr2ipaddr(&sa) {
+        Some(addr) => addr,
+        None => {
+            return Err(Error::Ioctl(
+                "socaddr to ipaddr conversion".to_string(),
+            ))
+        }
+    };
+
+    let ss = match sa.ss_family as i32 {
+        AF_INET => s4,
+        AF_INET6 => s6,
+        _ => return Err(Error::Ioctl("unknown address family".to_string())),
+    };
+
+    // get index
+    let mut ret = ioctl(ss, sys::SIOCGLIFINDEX, x);
+    if ret != 0 {
+        close(s4);
+        close(s6);
+        return Err(Error::Ioctl("ioctl SIOCGLIFINDEX".to_string()));
+    }
+    let idx = x.lifr_lifru.lifru_index;
+
+    // get netmask
+
+    ret = ioctl(ss, sys::SIOCGLIFNETMASK, x);
+    if ret != 0 {
+        close(s4);
+        close(s6);
+        return Err(Error::Ioctl("ioctl SIOCGLIFNETMASK".to_string()));
+    }
+    let _mask = x.lifr_lifru.lifru_addr;
+    let mask = match sockaddr2ipaddr(&_mask) {
+        Some(mask) => mask,
+        None => {
+            return Err(Error::Ioctl(
+                "socaddr to ipaddr conversion".to_string(),
+            ))
+        }
+    };
+
+    // determine state
+
+    ret = ioctl(ss, sys::SIOCGLIFFLAGS, x);
+    if ret != 0 {
+        close(s4);
+        close(s6);
+        return Err(Error::Ioctl("ioctl SIOCGLIFFLAGS".to_string()));
+    }
+    let flags = x.lifr_lifru.lifru_flags;
+    let state = {
+        if flags & sys::IFF_UP as u64 != 0 {
+            IpState::OK
+        } else if flags & sys::IFF_RUNNING as u64 != 0 {
+            ret = ioctl(ss, sys::SIOCGLIFDADSTATE, x);
+            if ret != 0 {
+                close(s4);
+                close(s6);
+                return Err(Error::Ioctl("ioctl SIOCGLIFFLAGS".to_string()));
+            }
+
+            if x.lifr_lifru.lifru_dadstate
+                == sys::glif_dad_state_t_DAD_IN_PROGRESS
+            {
+                IpState::Tentative
+            } else {
+                IpState::OK
+            }
+        } else {
+            IpState::Inaccessible
+        }
+    };
+
+    Ok(IpInfo {
+        addr,
+        state,
+        ifname: name.to_string(),
+        index: idx,
+        mask: ip_mask(mask),
+        family: sa.ss_family,
+    })
+}
+
+pub(crate) fn enable_v6_link_local(ifname: &str) -> Result<(), Error> {
+    let objname = format!("{}/v6", ifname);
+
+    let sock = unsafe { socket(AF_INET6 as i32, SOCK_DGRAM as i32, 0) };
+    if sock < 0 {
+        return Err(Error::Ioctl("socket 6".to_string()));
+    }
+
+    println!("checking plumbing");
+    match is_plumbed_for_af(ifname, sock) {
+        true => {}
+        false => {
+            println!("plumbing");
+            plumb_for_af(ifname, sys::IFF_IPV6.into())?;
+        }
+    };
+
+    println!("creating");
+    create_ip_addr_linklocal(sock, ifname, &objname)
+}
+
+pub fn create_ip_addr_linklocal(
+    sock: i32,
+    ifname: &str,
+    objname: &str,
+) -> Result<(), Error> {
+    let mut req = sys::lifreq::default();
+    for (i, c) in ifname.chars().enumerate() {
+        req.lifr_name[i] = c as i8;
+    }
+    let (lifnum, kernel_ifname) = create_logical_interface(sock, &req)?;
+
+    let ll_template = [0xfe, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+    unsafe {
+        req.lifr_lifru.lifru_addr = std::mem::zeroed();
+
+        let sin6 = &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage
+            as *mut sockaddr_in6;
+
+        // Set netmask to /10
+        (*sin6).sin6_family = AF_INET6 as u16;
+        (*sin6).sin6_addr.s6_addr = [
+            0b11111111, 0b11000000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
+        let ret = ioctl(sock, sys::SIOCSLIFNETMASK, &req);
+        if ret < 0 {
+            return Err(Error::Ioctl(format!(
+                "ioctl SIOSLIFNETMASK: {}",
+                sys::errno_string()
+            )));
+        }
+
+        // Set address. In the kernel SIOCSLIFADDR uses the ill_token associated
+        // with this interface to create an EUI-64 address.
+        (*sin6).sin6_addr.s6_addr = ll_template;
+        let ret = ioctl(sock, sys::SIOCSLIFPREFIX, &req);
+        if ret < 0 {
+            return Err(Error::Ioctl(format!(
+                "ioctl SIOSLIFADDR: {}",
+                sys::errno_string()
+            )));
+        }
+
+        //let (kernel_ifname, lifnum) = parse_ifname(&req)?;
+
+        let f = File::open("/etc/svc/volatile/ipadm/ipmgmt_door")?;
+
+        // add placeholder to ipmgmtd
+        println!("adding to ipmgmtd");
+        add_if_to_ipmgmtd(
+            objname,
+            ifname,
+            AF_INET6 as u16,
+            lifnum,
+            &f,
+            ip::AddrType::Ipv6Addrconf,
+        )?;
+
+        // ensure interface is up
+        let mut req: sys::lifreq = std::mem::zeroed();
+        for (i, c) in kernel_ifname.chars().enumerate() {
+            req.lifr_name[i] = c as i8;
+        }
+        let ret = ioctl(sock, sys::SIOCGLIFFLAGS, &req);
+        if ret < 0 {
+            return Err(Error::Ioctl(format!(
+                "ioctl SIOCGLIFFLAGS: {}",
+                sys::errno_string()
+            )));
+        }
+        req.lifr_lifru.lifru_flags |= sys::IFF_UP as u64;
+        let ret = ioctl(sock, sys::SIOCSLIFFLAGS, &req);
+        if ret < 0 {
+            return Err(Error::Ioctl(format!(
+                "ioctl SIOCSLIFFLAGS: {}",
+                sys::errno_string()
+            )));
+        }
+
+        let intfidlen = 0;
+        let stateless = true;
+        let stateful = false;
+
+        crate::ndpd::create_addrs(
+            ifname, *sin6, intfidlen, stateless, stateful, objname,
+        )
+        .map_err(|e| {
+            Error::Ioctl(format!("ndp create addrs: {}", e.to_string()))
+        })?;
+
+        println!("persisting to ipmgmtd");
+        ipmgmtd_persist(objname, ifname, lifnum, None, &f)?;
+    }
+
+    Ok(())
+}
+
+// TODO only considering ipv6
+fn create_logical_interface(
+    sock: i32,
+    req: &sys::lifreq,
+) -> Result<(i32, String), Error> {
+    unsafe {
+        // first check if the 0th logical interface has an address
+        let ret = ioctl(sock, sys::SIOCGLIFADDR, req);
+        if ret != 0 {
+            return Err(Error::Ioctl("ioctl SIOCGLIFADDR".to_string()));
+        }
+        let sin6 = &req.lifr_lifru.lifru_addr as *const sockaddr_storage
+            as *const sockaddr_in6;
+
+        // if addr is not unspecified, this logical interface is taken, create
+        // a new one.
+        if (*sin6).sin6_addr.s6_addr != [0u8; 16] {
+            println!("found: {:?}", (*sin6).sin6_addr.s6_addr);
+            let ret = ioctl(sock, sys::SIOCLIFADDIF, req);
+            if ret < 0 {
+                return Err(Error::Ioctl(format!(
+                    "ioctl SIOCLIFADDIF: {}",
+                    sys::errno_string()
+                )));
+            }
+        }
+
+        let (kname, lifnum) = parse_ifname(req)?;
+        Ok((lifnum, kname.into()))
+    }
+}
+
+fn parse_ifname(req: &sys::lifreq) -> Result<(&str, i32), Error> {
+    let ifname =
+        unsafe { std::ffi::CStr::from_ptr(&req.lifr_name[0]).to_str()? };
+
+    let parts: Vec<&str> = ifname.split(':').collect();
+    let lifnum = match parts.len() {
+        2 => parts[1].parse::<i32>().unwrap_or(0),
+        _ => 0,
+    };
+
+    println!("parsed {} = {}:{}", ifname, ifname, lifnum);
+
+    Ok((ifname, lifnum))
 }
 
 //TODO check auth?
-pub(crate) fn create_ip_addr(
+pub(crate) fn create_ip_addr_static(
     ifname: impl AsRef<str>,
     objname: impl AsRef<str>,
     addr: IpPrefix,
     sock: i32,
 ) -> Result<(), Error> {
-
-
     unsafe {
-
         let mut req: sys::lifreq = std::mem::zeroed();
-        for (i,c) in ifname.as_ref().chars().enumerate() {
+        for (i, c) in ifname.as_ref().chars().enumerate() {
             req.lifr_name[i] = c as i8;
         }
 
-        // create logical ip interface
-        let ret = ioctl(sock,  sys::SIOCLIFADDIF, &req);
-        if ret < 0 {
-            return Err(Error::Ioctl(
-                    format!("ioctl SIOCLIFADDIF: {}", sys::errno_string())))
-        }
-
-        let kernel_ifname = std::ffi::CStr::from_ptr(
-            &mut req.lifr_name[0]).to_str()?;
-
-        let parts: Vec<&str> = kernel_ifname.split(":").collect();
-        let lifnum = match parts.len() {
-            2 => {
-                match i32::from_str_radix(parts[1], 10) {
-                    Ok(n) => n,
-                    Err(_) => 0,
-                }
-            }
-            _ => 0,
-        };
+        create_logical_interface(sock, &req)?;
 
         // assign addr
         match addr {
             IpPrefix::V6(a) => {
                 req.lifr_lifru.lifru_addr.ss_family = AF_INET6 as u16;
-                let sas = &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage;
+                let sas =
+                    &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage;
+
                 let sa6 = sas as *mut sockaddr_in6;
                 (*sa6).sin6_addr.s6_addr = a.addr.octets();
             }
@@ -803,21 +1241,25 @@ pub(crate) fn create_ip_addr(
                 req.lifr_lifru.lifru_addr.ss_family = AF_INET as u16;
             }
         };
-        let ret = ioctl(sock,  sys::SIOCSLIFADDR, &req);
+        let ret = ioctl(sock, sys::SIOCSLIFADDR, &req);
         if ret < 0 {
-            return Err(Error::Ioctl(
-                    format!("ioctl SIOCSLIFADDR: {}", sys::errno_string())))
+            return Err(Error::Ioctl(format!(
+                "ioctl SIOCSLIFADDR: {}",
+                sys::errno_string()
+            )));
         }
 
         // assign netmask
         match addr {
             IpPrefix::V6(a) => {
                 req.lifr_lifru.lifru_addr.ss_family = AF_INET6 as u16;
-                let sas = &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage;
+                let sas =
+                    &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage;
+
                 let sa6 = sas as *mut sockaddr_in6;
                 let mut addr: u128 = 0;
                 for i in 0..a.mask {
-                    addr |= 1<<(127-i);
+                    addr |= 1 << (127 - i);
                 }
                 (*sa6).sin6_addr.s6_addr = Ipv6Addr::from(addr).octets();
             }
@@ -825,146 +1267,213 @@ pub(crate) fn create_ip_addr(
                 req.lifr_lifru.lifru_addr.ss_family = AF_INET as u16;
             }
         };
-        let ret = ioctl(sock,  sys::SIOCSLIFNETMASK, &req);
+        let ret = ioctl(sock, sys::SIOCSLIFNETMASK, &req);
         if ret < 0 {
-            return Err(Error::Ioctl(
-                    format!("ioctl SIOCSLIFADDR: {}", sys::errno_string())))
+            return Err(Error::Ioctl(format!(
+                "ioctl SIOCSLIFADDR: {}",
+                sys::errno_string()
+            )));
         }
 
-        // assign name
-        let mut iaa: ip::IpmgmtAobjopArg = std::mem::zeroed();
-        iaa.cmd = ip::IpmgmtCmd::AddrobjLookupAdd;
-        for (i, c) in objname.as_ref().chars().enumerate() {
-            iaa.objname[i] = c as i8;
-        }
-        for (i, c) in ifname.as_ref().chars().enumerate() {
-            iaa.ifname[i] = c as i8;
-        }
-        iaa.family = match addr {
+        // add if to ipmgmtd
+        let (kernel_ifname, lifnum) = parse_ifname(&req)?;
+
+        let af = match addr {
             IpPrefix::V6(_) => AF_INET6 as u16,
             IpPrefix::V4(_) => AF_INET as u16,
         };
-        iaa.atype = ip::AddrType::Static;
 
         let f = File::open("/etc/svc/volatile/ipadm/ipmgmt_door")?;
 
-        let mut response: *mut ip::IpmgmtRval = malloc(std::mem::size_of::<
-            ip::IpmgmtRval,
-        >()) as *mut ip::IpmgmtRval;
-
-        door_callp(f.as_raw_fd(), iaa, &mut response);
-        free(response as *mut c_void);
-
-        // set logical interface number
-    
-        iaa = std::mem::zeroed();
-        iaa.cmd = ip::IpmgmtCmd::AddrobjSetLifnum;
-        for (i, c) in objname.as_ref().chars().enumerate() {
-            iaa.objname[i] = c as i8;
-        }
-        for (i, c) in ifname.as_ref().chars().enumerate() {
-            iaa.ifname[i] = c as i8;
-        }
-        iaa.lnum = lifnum;
-        let family = match addr {
-            IpPrefix::V6(_) => AF_INET6 as u16,
-            IpPrefix::V4(_) => AF_INET as u16,
-        };
-        iaa.family = family;
-        iaa.atype = ip::AddrType::Static;
-
-        let mut response: *mut ip::IpmgmtRval = malloc(std::mem::size_of::<
-            ip::IpmgmtRval,
-        >()) as *mut ip::IpmgmtRval;
-
-        door_callp(f.as_raw_fd(), iaa, &mut response);
-        free(response as *mut c_void);
+        add_if_to_ipmgmtd(
+            objname.as_ref(),
+            ifname.as_ref(),
+            af,
+            lifnum,
+            &f,
+            ip::AddrType::Static,
+        )?;
 
         // set up
-        
+
         let mut req: sys::lifreq = std::mem::zeroed();
-        for (i,c) in kernel_ifname.chars().enumerate() {
+        for (i, c) in kernel_ifname.chars().enumerate() {
             req.lifr_name[i] = c as i8;
         }
         req.lifr_lifru.lifru_flags |= sys::IFF_UP as u64;
         let ret = ioctl(sock, sys::SIOCSLIFFLAGS, &req);
         if ret < 0 {
-            return Err(Error::Ioctl(
-                    format!("ioctl SIOCSLIFFLAGS: {}", sys::errno_string())))
+            return Err(Error::Ioctl(format!(
+                "ioctl SIOCSLIFFLAGS: {}",
+                sys::errno_string()
+            )));
         }
 
-        // persist.... kindof
-        let mut nvl = nvpair::NvList::new_unique_names();
-        nvl.insert("_ifname", ifname.as_ref())?;
-        nvl.insert("_aobjname", objname.as_ref())?;
-        nvl.insert("_lifnum", &(lifnum as i32))?;
+        // ipmgmtd persist .. kindof
+        ipmgmtd_persist(
+            objname.as_ref(),
+            ifname.as_ref(),
+            lifnum,
+            Some(addr),
+            &f,
+        )?;
 
-        let ahname = match addr {
-            IpPrefix::V6(a) => a.addr.to_string(),
-            IpPrefix::V4(a) => a.addr.to_string(),
-        };
+        //TODO duplicate address detection
+        //let rtsock = socket(libc::AF_ROUTE, libc::SOCK_RAW, family as i32);
+    };
 
-        let mut addr_nvl = nvpair::NvList::new_unique_names();
-        addr_nvl.insert("_aname", ahname.as_str())?;
+    Ok(())
+}
 
-        let addr_nvl_name = match addr {
-            IpPrefix::V6(_) => "_ipv6addr",
-            IpPrefix::V4(_) => "_ipv4addr",
-        };
+fn add_if_to_ipmgmtd(
+    objname: &str,
+    ifname: &str,
+    af: u16,
+    lifnum: i32,
+    f: &File,
+    kind: ip::AddrType,
+) -> Result<(), Error> {
+    // assign name
+    let mut iaa: ip::IpmgmtAobjopArg = unsafe { std::mem::zeroed() };
+    iaa.cmd = ip::IpmgmtCmd::AddrobjLookupAdd;
+    for (i, c) in objname.chars().enumerate() {
+        iaa.objname[i] = c as i8;
+    }
+    for (i, c) in ifname.chars().enumerate() {
+        iaa.ifname[i] = c as i8;
+    }
+    iaa.family = af;
+    iaa.atype = kind;
 
-        nvl.insert(addr_nvl_name, addr_nvl.as_ref())?;
-        nvl.insert("up", "yes")?;
+    let mut response: *mut ip::IpmgmtRval = unsafe {
+        malloc(std::mem::size_of::<ip::IpmgmtRval>()) as *mut ip::IpmgmtRval
+    };
 
-        let nvl_c = nvl.as_mut_ptr();
-        let mut nvl_buf: *mut c_char = std::ptr::null_mut();
-        let mut nvl_sz: nvpair_sys::size_t = 0;
-        let ret = nvpair_sys::nvlist_pack(
+    door_callp(
+        f.as_raw_fd(),
+        iaa,
+        ptr::NonNull::new(&mut response).unwrap(), // null not possible
+    );
+    unsafe { free(response as *mut c_void) };
+
+    // set logical interface number
+
+    iaa = unsafe { std::mem::zeroed() };
+    iaa.cmd = ip::IpmgmtCmd::AddrobjSetLifnum;
+    for (i, c) in objname.chars().enumerate() {
+        iaa.objname[i] = c as i8;
+    }
+    for (i, c) in ifname.chars().enumerate() {
+        iaa.ifname[i] = c as i8;
+    }
+    iaa.lnum = lifnum;
+    let family = af;
+    iaa.family = family;
+    iaa.atype = kind;
+
+    let mut response: *mut ip::IpmgmtRval = unsafe {
+        malloc(std::mem::size_of::<ip::IpmgmtRval>()) as *mut ip::IpmgmtRval
+    };
+
+    door_callp(
+        f.as_raw_fd(),
+        iaa,
+        ptr::NonNull::new(&mut response).unwrap(), // null not possible
+    );
+    unsafe { free(response as *mut c_void) };
+
+    Ok(())
+}
+
+fn ipmgmtd_persist(
+    objname: &str,
+    ifname: &str,
+    lifnum: i32,
+    addr: Option<IpPrefix>,
+    f: &File,
+) -> Result<(), Error> {
+    let mut nvl = nvpair::NvList::new_unique_names();
+    nvl.insert("_ifname", ifname)?;
+    nvl.insert("_aobjname", objname)?;
+    nvl.insert("_lifnum", &(lifnum as i32))?;
+
+    match addr {
+        Some(addr) => {
+            let ahname = match addr {
+                IpPrefix::V6(a) => a.addr.to_string(),
+                IpPrefix::V4(a) => a.addr.to_string(),
+            };
+
+            let mut addr_nvl = nvpair::NvList::new_unique_names();
+            addr_nvl.insert("_aname", ahname.as_str())?;
+            let addr_nvl_name = match addr {
+                IpPrefix::V6(_) => "_ipv6addr",
+                IpPrefix::V4(_) => "_ipv4addr",
+            };
+
+            nvl.insert(addr_nvl_name, addr_nvl.as_ref())?;
+            nvl.insert("up", "yes")?;
+        }
+        // XXX hack: assuming this is a v6 link local
+        None => {
+            let mut ll_nvl = nvpair::NvList::new_unique_names();
+            //let ll_template: [u8;16] = [
+            //    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+            //ll_nvl.insert("_addr", &ll_template[..])?;
+            let prefixlen: u32 = 0;
+            ll_nvl.insert("prefixlen", &prefixlen)?;
+            ll_nvl.insert("_stateless", "yes")?;
+            ll_nvl.insert("_stateful", "no")?;
+            nvl.insert("_intfid", ll_nvl.as_ref())?;
+        }
+    }
+
+    let nvl_c = nvl.as_mut_ptr();
+    let mut nvl_buf: *mut c_char = std::ptr::null_mut();
+    let mut nvl_sz: nvpair_sys::size_t = 0;
+    let ret = unsafe {
+        nvpair_sys::nvlist_pack(
             nvl_c,
             &mut nvl_buf,
             &mut nvl_sz,
             nvpair_sys::NV_ENCODE_NATIVE,
             0,
-        );
-        if ret != 0 {
-            return Err(Error::NvPair(format!("{}", ret)));
-        }
+        )
+    };
+    if ret != 0 {
+        return Err(Error::NvPair(format!("{}", ret)));
+    }
 
-        let arg = ip::IpmgmtSetAddr{
-            cmd: ip::IpmgmtCmd::SetAddr,
-            flags: sys::IPMGMT_ACTIVE,
-            nvlsize: nvl_sz as u32,
-        };
+    let arg = ip::IpmgmtSetAddr {
+        cmd: ip::IpmgmtCmd::SetAddr,
+        flags: sys::IPMGMT_ACTIVE,
+        nvlsize: nvl_sz as u32,
+    };
 
-        let mut buf: Vec<c_char> = Vec::new();
+    let mut buf: Vec<c_char> = Vec::new();
 
-        let arg_bytes = std::slice::from_raw_parts(
+    let arg_bytes = unsafe {
+        std::slice::from_raw_parts(
             (&arg as *const ip::IpmgmtSetAddr) as *const c_char,
             size_of::<ip::IpmgmtSetAddr>(),
-        );
-        for c in arg_bytes {
-            buf.push(*c);
-        }
+        )
+    };
+    for c in arg_bytes {
+        buf.push(*c);
+    }
 
-        let nvl_bytes = std::slice::from_raw_parts(nvl_buf, nvl_sz as usize);
-        for c in nvl_bytes {
-            buf.push(*c);
-        }
+    let nvl_bytes =
+        unsafe { std::slice::from_raw_parts(nvl_buf, nvl_sz as usize) };
+    for c in nvl_bytes {
+        buf.push(*c);
+    }
 
-        let resp: ip::IpmgmtRval = door_call_slice(
-            f.as_raw_fd(),
-            buf.as_slice(),
-        );
-        if resp.err != 0 {
-            return Err(Error::Ipmgmtd(format!("{}", sys::err_string(resp.err))));
-        }
-
-        //TODO duplicate address detection
-        //let rtsock = socket(libc::AF_ROUTE, libc::SOCK_RAW, family as i32);
-
+    let resp: ip::IpmgmtRval = door_call_slice(f.as_raw_fd(), buf.as_slice());
+    if resp.err != 0 {
+        return Err(Error::Ipmgmtd(sys::err_string(resp.err)));
     }
 
     Ok(())
-
 }
 
 fn sockaddr2ipaddr(sa: &libc::sockaddr_storage) -> Option<IpAddr> {
@@ -972,8 +1481,9 @@ fn sockaddr2ipaddr(sa: &libc::sockaddr_storage) -> Option<IpAddr> {
         match sa.ss_family as i32 {
             libc::AF_INET => {
                 let sa4 = sa as *const sockaddr_storage as *const sockaddr_in;
-                Some(IpAddr::V4(Ipv4Addr::from(
-                            u32::from_be((*sa4).sin_addr.s_addr))))
+                Some(IpAddr::V4(Ipv4Addr::from(u32::from_be(
+                    (*sa4).sin_addr.s_addr,
+                ))))
             }
             libc::AF_INET6 => {
                 let sa6 = sa as *const sockaddr_storage as *const sockaddr_in6;
@@ -1067,16 +1577,18 @@ impl Default for VnicIocCreate {
     }
 }
 
-pub(crate) fn create_vnic(id: u32, link_id: u32)
--> Result<crate::LinkInfo, Error> {
+pub(crate) fn create_vnic(
+    id: u32,
+    link_id: u32,
+) -> Result<crate::LinkInfo, Error> {
     unsafe {
         let fd = dld_fd()?;
 
         debug!("creating vnic with id {}", id);
 
         let mut arg = VnicIocCreate {
+            link_id,
             vnic_id: id,
-            link_id: link_id,
             mac_addr_type: VnicMacAddrType::Auto,
             mac_len: 0,
             mac_prefix_len: 3,
@@ -1098,12 +1610,14 @@ pub(crate) fn create_vnic(id: u32, link_id: u32)
             return Err(Error::Ioctl(format!("ioctl VNIC_IOC_CREATE {}", ret)));
         }
 
-        Ok(crate::link::get_link(id)?)
+        crate::link::get_link(id)
     }
 }
 
-pub(crate) fn create_simnet(id: u32, flags: crate::LinkFlags)
--> Result<crate::LinkInfo, Error> {
+pub(crate) fn create_simnet(
+    id: u32,
+    flags: crate::LinkFlags,
+) -> Result<crate::LinkInfo, Error> {
     unsafe {
         let fd = dld_fd()?;
 
@@ -1119,11 +1633,14 @@ pub(crate) fn create_simnet(id: u32, flags: crate::LinkFlags)
 
         let ret = ioctl(fd.as_raw_fd(), sys::SIMNET_IOC_CREATE, &arg);
         if ret < 0 {
-            return Err(Error::Ioctl(format!("ioctl SIMNET_IOC_CREATE {}", ret)));
+            return Err(Error::Ioctl(format!(
+                "ioctl SIMNET_IOC_CREATE {}",
+                ret
+            )));
         }
     }
 
-    Ok(crate::link::get_link(id)?)
+    crate::link::get_link(id)
 }
 
 #[repr(C)]

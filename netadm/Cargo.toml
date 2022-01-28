@@ -7,7 +7,7 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0"
-clap = { version = "3.0.0-beta.4", features = ["color"] }
+clap = { version = "3.0.0-beta.5", features = ["color"] }
 netadm-sys = { path = "../lib" }
 tabwriter = { version = "1", features = ["ansi_formatting"] }
 colored = "2"

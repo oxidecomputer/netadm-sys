@@ -10,7 +10,7 @@ pub fn get_linkstate(name: &str) -> Result<sys::link_state_t, Error> {
     unsafe {
         // open kstat
         let kcp = sys::kstat_open();
-        if kcp == ptr::null_mut() {
+        if kcp.is_null() {
             return Err(Error::Kstat("open".to_string()));
         }
 
@@ -25,7 +25,7 @@ pub fn get_linkstate(name: &str) -> Result<sys::link_state_t, Error> {
             0,
             cname.as_c_str().as_ptr() as *mut c_char,
         );
-        if ksp == ptr::null_mut() {
+        if ksp.is_null() {
             sys::kstat_close(kcp);
             return Err(Error::Kstat(format!("lookup {}", name)));
         }
@@ -37,10 +37,12 @@ pub fn get_linkstate(name: &str) -> Result<sys::link_state_t, Error> {
         }
 
         // lookup the link state data value
-        let knp = sys::kstat_data_lookup(ksp, stat.as_c_str().as_ptr() as *mut c_char)
-            as *mut sys::kstat_named_t;
+        let knp = sys::kstat_data_lookup(
+            ksp,
+            stat.as_c_str().as_ptr() as *mut c_char,
+        ) as *mut sys::kstat_named_t;
 
-        if knp == ptr::null_mut() {
+        if knp.is_null() {
             sys::kstat_close(kcp);
             return Err(Error::Kstat("data lookup".to_string()));
         }

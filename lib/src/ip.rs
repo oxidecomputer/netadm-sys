@@ -1,6 +1,7 @@
 // Copyright 2021 Oxide Computer Company
 
 use crate::nvlist::{NvDataType, NvHeader, NvPair, Value, NVP};
+use libc::{free, malloc, sockaddr_in6};
 use rusty_doors::{door_call, door_callp};
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -8,15 +9,11 @@ use std::ffi::CStr;
 use std::fs::File;
 use std::mem::{align_of, size_of};
 use std::net::{Ipv4Addr, Ipv6Addr};
+use std::os::raw::c_char;
 use std::os::unix::io::AsRawFd;
+use std::ptr;
 use std::str::FromStr;
 use tracing::{debug, trace, warn};
-use libc::{
-    malloc,
-    free,
-    sockaddr_in6,
-};
-use std::os::raw::c_char;
 
 #[derive(Debug)]
 #[repr(i32)]
@@ -69,35 +66,18 @@ impl Default for IpmgmtGetAddr {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 #[repr(C)]
 pub struct IpmgmtRval {
     pub err: i32,
 }
 
-impl Default for IpmgmtRval {
-    fn default() -> Self {
-        IpmgmtRval {
-            err: 0,
-        }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Default)]
 #[repr(C)]
 pub struct IpmgmtGetRval {
     pub err: i32,
     pub nval_size: u32,
     /* native-encoded nvlist follows*/
-}
-
-impl Default for IpmgmtGetRval {
-    fn default() -> Self {
-        IpmgmtGetRval {
-            err: 0,
-            nval_size: 0,
-        }
-    }
 }
 
 pub const LIFNAMSIZ: u32 = 32;
@@ -127,7 +107,7 @@ pub struct IpmgmtAobjopArg {
     pub ifname: [c_char; LIFNAMSIZ as usize],
     pub lnum: i32,
     pub family: u16,
-    pub atype: AddrType
+    pub atype: AddrType,
 }
 
 #[repr(C)]
@@ -145,7 +125,7 @@ pub struct IpmgmtAobjopRval {
 
 impl Default for IpmgmtAobjopRval {
     fn default() -> Self {
-        IpmgmtAobjopRval{
+        IpmgmtAobjopRval {
             err: 0,
             objname: [0; IPADM_AOBJSIZ as usize],
             ifname: [0; LIFNAMSIZ as usize],
@@ -167,7 +147,7 @@ pub union IpmgmtAddrTypeCache {
 
 impl Default for IpmgmtAddrTypeCache {
     fn default() -> Self {
-        IpmgmtAddrTypeCache{
+        IpmgmtAddrTypeCache {
             ipv6_cache: IpmgmtIpv6Cache::default(),
         }
     }
@@ -181,7 +161,6 @@ pub enum BooleanT {
     True,
 }
 
-
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct IpmgmtIpv6Cache {
@@ -193,16 +172,14 @@ impl Default for IpmgmtIpv6Cache {
     fn default() -> Self {
         IpmgmtIpv6Cache {
             linklocal: BooleanT::False,
-            ifid: sockaddr_in6{
+            ifid: sockaddr_in6 {
                 sin6_family: 0,
                 sin6_port: 0,
                 sin6_flowinfo: 0,
-                sin6_addr: libc::in6_addr{
-                    s6_addr: [0; 16],
-                },
+                sin6_addr: libc::in6_addr { s6_addr: [0; 16] },
                 sin6_scope_id: 0,
                 __sin6_src_id: 0,
-            }
+            },
         }
     }
 }
@@ -215,7 +192,7 @@ pub struct IpmgmtDhcpCache {
 
 impl Default for IpmgmtDhcpCache {
     fn default() -> Self {
-        IpmgmtDhcpCache{ reqhost: [0; 256] }
+        IpmgmtDhcpCache { reqhost: [0; 256] }
     }
 }
 
@@ -273,8 +250,8 @@ pub struct Intfid {
     pub stateful: bool,
 }
 
-pub fn get_persistent_ipinfo() 
--> Result<HashMap<String, HashMap<String, IpInfo>>, String> {
+pub fn get_persistent_ipinfo(
+) -> Result<HashMap<String, HashMap<String, IpInfo>>, String> {
     unsafe {
         //// call the ipadmd door to get address information
 
@@ -283,9 +260,8 @@ pub fn get_persistent_ipinfo()
 
         // This memory may get realloc'd by the door call, so we cannot use a
         // Box :/
-        let mut response: *mut IpmgmtGetRval = malloc(std::mem::size_of::<
-            IpmgmtGetRval,
-        >()) as *mut IpmgmtGetRval;
+        let mut response: *mut IpmgmtGetRval =
+            malloc(std::mem::size_of::<IpmgmtGetRval>()) as *mut IpmgmtGetRval;
 
         let request = IpmgmtGetAddr {
             ..Default::default()
@@ -293,7 +269,8 @@ pub fn get_persistent_ipinfo()
         let resp: *mut IpmgmtGetRval = door_callp(
             f.as_raw_fd(),
             request,
-            &mut response);
+            ptr::NonNull::new(&mut response).unwrap(), // null not possible
+        );
         trace!("got {} bytes of nval", (*resp).nval_size);
 
         //// extract nvlist  header
@@ -305,10 +282,12 @@ pub fn get_persistent_ipinfo()
 
         // NOTE! somehwere in the packing process an 8 byte padd is added
         // between the header and the first nvpair
-        let sk = ((nvh.offset(1) as *const NvHeader) as *const u8).offset(0) as *const u8;
+        let sk = ((nvh.offset(1) as *const NvHeader) as *const u8).offset(0)
+            as *const u8;
         let skipped = std::slice::from_raw_parts(sk, 8);
         warn!("skipping {:x?}", skipped);
-        let p = ((nvh.offset(1) as *const NvHeader) as *const u8).offset(8) as *const u8;
+        let p = ((nvh.offset(1) as *const NvHeader) as *const u8).offset(8)
+            as *const u8;
 
         // NOTE! i've observed that `nval_size` can be larger than the
         // actual size of the list. We are relying on zero-sized nvpair
@@ -331,8 +310,9 @@ pub fn get_persistent_ipinfo()
     }
 }
 
-fn handle_nvps(nvps: &Vec<NVP<'static>>) 
--> HashMap<String, HashMap<String, IpInfo>> {
+fn handle_nvps(
+    nvps: &[NVP<'static>],
+) -> HashMap<String, HashMap<String, IpInfo>> {
     let mut result = HashMap::new();
 
     for nvp in nvps.iter() {
@@ -348,35 +328,23 @@ fn handle_nvps(nvps: &Vec<NVP<'static>>)
                 hm.insert(ip_info.addr_obj.clone(), ip_info);
                 result.insert(k, hm);
             }
-            Some(hm) => {
-                match hm.get_mut(&ip_info.addr_obj.clone()) {
-                    Some(ipi) => {
-                        match &mut ipi.properties {
-                            IpProperties::Dhcp(dcp) => {
-                                match ip_info.properties {
-                                    IpProperties::Dhcp(dcpi) => {
-                                        match dcpi.parameters {
-                                            Some(ps) => dcp.parameters = Some(ps),
-                                            None => {}
-                                        }
-                                        match dcpi.reqhost {
-                                            Some(rh) => dcp.reqhost = Some(rh),
-                                            None => {}
-                                        }
-                                    }
-                                    // multiset only supported for dhcp
-                                    _ => {}
-                                }
+            Some(hm) => match hm.get_mut(&ip_info.addr_obj.clone()) {
+                Some(ipi) => {
+                    if let IpProperties::Dhcp(dcp) = &mut ipi.properties {
+                        if let IpProperties::Dhcp(dcpi) = ip_info.properties {
+                            if let Some(ps) = dcpi.parameters {
+                                dcp.parameters = Some(ps)
                             }
-                            // multiset only supported for dhcp
-                            _ => {}
+                            if let Some(rh) = dcpi.reqhost {
+                                dcp.reqhost = Some(rh)
+                            }
                         }
                     }
-                    None => {
-                        hm.insert(ip_info.addr_obj.clone(), ip_info);
-                    }
                 }
-            }
+                None => {
+                    hm.insert(ip_info.addr_obj.clone(), ip_info);
+                }
+            },
         }
     }
 
@@ -407,64 +375,58 @@ fn handle_nvp(nvp: &NVP<'static>) -> Option<IpInfo> {
 
     for part in parts.iter() {
         if part.name == "_ifname" {
-            match part.value {
-                Value::Str(s) => if_name = Some(s.to_string()),
-                _ => {}
+            if let Value::Str(s) = part.value {
+                if_name = Some(s.to_string());
             }
         }
 
         if part.name == "_aobjname" {
-            match part.value {
-                Value::Str(s) => addr_obj = Some(s.to_string()),
-                _ => {}
+            if let Value::Str(s) = part.value {
+                addr_obj = Some(s.to_string());
             }
         }
 
         if part.name == "_dhcp" {
-            match &part.value {
-                Value::NvList(vs) => {
-                    let mut dcp = DhcpClientParameters {
-                        wait: -1,
-                        primary: false,
-                    };
-                    for v in vs.iter() {
-                        if v.name == "wait" {
-                            match v.value {
-                                Value::Int32(i) => dcp.wait = i,
-                                _ => {}
-                            }
-                        }
-                        if v.name == "primary" {
-                            match v.value {
-                                Value::Boolean(b) => dcp.primary = b,
-                                _ => {}
-                            }
+            if let Value::NvList(vs) = &part.value {
+                let mut dcp = DhcpClientParameters {
+                    wait: -1,
+                    primary: false,
+                };
+                for v in vs.iter() {
+                    if v.name == "wait" {
+                        if let Value::Int32(i) = v.value {
+                            dcp.wait = i;
                         }
                     }
-                    match &mut ip_properties {
-                        Some(props) => match props {
-                            IpProperties::Dhcp(props) => {
-                                props.parameters = Some(dcp)
-                            }
-                            _ => {
-                                warn!("dhcp client params in non-dhcp record");
-                            }
-                        },
-                        None => {
-                            ip_properties = Some(IpProperties::Dhcp(DhcpProperties {
-                                parameters: Some(dcp),
-                                reqhost: None,
-                            }));
+                    if v.name == "primary" {
+                        if let Value::Boolean(b) = v.value {
+                            dcp.primary = b;
                         }
                     }
                 }
-                _ => {}
+                match &mut ip_properties {
+                    Some(props) => match props {
+                        IpProperties::Dhcp(props) => {
+                            props.parameters = Some(dcp)
+                        }
+                        _ => {
+                            warn!("dhcp client params in non-dhcp record");
+                        }
+                    },
+                    None => {
+                        ip_properties =
+                            Some(IpProperties::Dhcp(DhcpProperties {
+                                parameters: Some(dcp),
+                                reqhost: None,
+                            }));
+                    }
+                }
             };
         }
 
         if part.name == "reqhost" {
-            match &part.value {
-                Value::Str(s) => match &mut ip_properties {
+            if let Value::Str(s) = &part.value {
+                match &mut ip_properties {
                     Some(props) => match props {
                         IpProperties::Dhcp(props) => {
                             props.reqhost = Some(s.to_string());
@@ -474,122 +436,105 @@ fn handle_nvp(nvp: &NVP<'static>) -> Option<IpInfo> {
                         }
                     },
                     None => {
-                        ip_properties = Some(IpProperties::Dhcp(DhcpProperties {
-                            parameters: None,
-                            reqhost: Some(s.to_string()),
-                        }));
+                        ip_properties =
+                            Some(IpProperties::Dhcp(DhcpProperties {
+                                parameters: None,
+                                reqhost: Some(s.to_string()),
+                            }));
                     }
-                },
-                _ => {}
+                }
             }
         }
 
         if part.name == "_intfid" {
-            match &part.value {
-                Value::NvList(vs) => {
-                    let mut intfid = Intfid {
-                        prefix_len: 0,
-                        addr: Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0),
-                        stateless: false,
-                        stateful: false,
-                    };
-                    for v in vs.iter() {
-                        if v.name == "prefixlen" {
-                            match v.value {
-                                Value::Uint32(u) => intfid.prefix_len = u,
-                                _ => {}
-                            }
+            if let Value::NvList(vs) = &part.value {
+                let mut intfid = Intfid {
+                    prefix_len: 0,
+                    addr: Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0),
+                    stateless: false,
+                    stateful: false,
+                };
+                for v in vs.iter() {
+                    if v.name == "prefixlen" {
+                        if let Value::Uint32(u) = v.value {
+                            intfid.prefix_len = u;
                         }
-                        if v.name == "_addr" {
-                            match v.value {
-                                Value::Uint8Array(u) => {
-                                    intfid.addr = match u.try_into()
-                                        as Result<
-                                            [u8; 16], 
-                                            <&[u8] as TryInto<[u8; 16]>>::Error>
-                                    {
-                                        Ok(addr) => Ipv6Addr::from(addr),
-                                        Err(_) => continue,
-                                    }
-                                }
-                                _ => {}
-                            }
-                        }
-                        if v.name == "_stateless" {
-                            match v.value {
-                                Value::Str(b) => match b {
-                                    "yes" => intfid.stateless = true,
-                                    _ => {}
-                                },
-                                _ => {}
-                            }
-                        }
-                        if v.name == "_stateful" {
-                            match v.value {
-                                Value::Str(b) => match b {
-                                    "yes" => intfid.stateful = true,
-                                    _ => {}
-                                },
-                                _ => {}
+                    }
+                    if v.name == "_addr" {
+                        if let Value::Uint8Array(u) = v.value {
+                            intfid.addr = match u.try_into()
+                                as Result<
+                                    [u8; 16],
+                                    <&[u8] as TryInto<[u8; 16]>>::Error,
+                                > {
+                                Ok(addr) => Ipv6Addr::from(addr),
+                                Err(_) => continue,
                             }
                         }
                     }
-                    match &mut ip_properties {
-                        Some(_) => {
-                            warn!("duplicate v6 properties");
+                    if v.name == "_stateless" {
+                        if let Value::Str(b) = v.value {
+                            if b == "yes" {
+                                intfid.stateless = true;
+                            }
                         }
-                        None => {
-                            ip_properties = Some(IpProperties::Intfid(intfid));
+                    }
+                    if v.name == "_stateful" {
+                        if let Value::Str(b) = v.value {
+                            if b == "yes" {
+                                intfid.stateful = true
+                            }
                         }
                     }
                 }
-                _ => {}
+                match &mut ip_properties {
+                    Some(_) => {
+                        warn!("duplicate v6 properties");
+                    }
+                    None => {
+                        ip_properties = Some(IpProperties::Intfid(intfid));
+                    }
+                }
             }
         }
 
         if part.name == "_ipv4addr" {
-            match &part.value {
-                Value::NvList(vs) => {
-                    for v in vs.iter() {
-                        match &v.value {
-                            Value::Str(s) => match Ipv4Addr::from_str(s) {
-                                Ok(addr) => {
-                                    ip_properties =
-                                        Some(IpProperties::V4Static(
-                                                V4Static { addr: addr }));
-                                }
-                                _ => {
-                                    warn!("bad ipv4 address: {}", s)
-                                }
-                            },
-                            _ => {}
+            if let Value::NvList(vs) = &part.value {
+                for v in vs.iter() {
+                    if let Value::Str(s) = &v.value {
+                        match Ipv4Addr::from_str(s) {
+                            Ok(addr) => {
+                                ip_properties =
+                                    Some(IpProperties::V4Static(V4Static {
+                                        addr,
+                                    }));
+                            }
+                            _ => {
+                                warn!("bad ipv4 address: {}", s)
+                            }
                         }
                     }
                 }
-                _ => {}
             }
         }
 
         if part.name == "_ipv6addr" {
-            match &part.value {
-                Value::NvList(vs) => {
-                    for v in vs.iter() {
-                        match &v.value {
-                            Value::Str(s) => match Ipv6Addr::from_str(s) {
-                                Ok(addr) => {
-                                    ip_properties =
-                                        Some(IpProperties::V6Static(
-                                                V6Static { addr: addr }));
-                                }
-                                _ => {
-                                    warn!("bad ipv6 address: {}", s)
-                                }
-                            },
-                            _ => {}
+            if let Value::NvList(vs) = &part.value {
+                for v in vs.iter() {
+                    if let Value::Str(s) = &v.value {
+                        match Ipv6Addr::from_str(s) {
+                            Ok(addr) => {
+                                ip_properties =
+                                    Some(IpProperties::V6Static(V6Static {
+                                        addr,
+                                    }));
+                            }
+                            _ => {
+                                warn!("bad ipv6 address: {}", s)
+                            }
                         }
                     }
                 }
-                _ => {}
             }
         }
     }
@@ -615,7 +560,7 @@ fn extract_nvps(mut p: *const u8, size: i32) -> (Vec<NVP<'static>>, i32) {
             let sz = *(p as *const i32);
             if sz == 0 {
                 trace!("found zero sized nvpair, return from extract");
-                consumed = consumed + 4;
+                consumed += 4;
                 //p = p.add(4);
                 return (nvps, consumed);
             }
@@ -630,7 +575,7 @@ fn extract_nvps(mut p: *const u8, size: i32) -> (Vec<NVP<'static>>, i32) {
 
             p = p.add(sz as usize);
             p = p.add(p.align_offset(align_of::<u32>()));
-            consumed = consumed + sz as i32;
+            consumed += sz as i32;
             trace!("consumed {}", consumed);
             if consumed >= size {
                 break;
@@ -645,7 +590,7 @@ fn extract_nvps(mut p: *const u8, size: i32) -> (Vec<NVP<'static>>, i32) {
                         name: nv.name,
                         value: Value::NvList(embedded_nvps),
                     });
-                    consumed = consumed + embedded_consumed;
+                    consumed += embedded_consumed;
                     p = p.add(embedded_consumed as usize);
                 }
                 _ => {
@@ -670,7 +615,8 @@ fn extract_nvp(nvp: *const NvPair) -> Result<NVP<'static>, String> {
         trace!("nvp: {:?}", *nvp);
         let p = ((nvp.offset(1) as *const NvPair) as *const u8) as *mut u8;
         let name = {
-            let slice = std::slice::from_raw_parts(p, (*nvp).name_size as usize);
+            let slice =
+                std::slice::from_raw_parts(p, (*nvp).name_size as usize);
             let cstr = std::ffi::CStr::from_bytes_with_nul_unchecked(slice);
             match cstr.to_str() {
                 Ok(s) => s,
@@ -689,14 +635,13 @@ fn extract_nvp(nvp: *const NvPair) -> Result<NVP<'static>, String> {
             NvDataType::Str => {
                 let slice = std::slice::from_raw_parts(
                     v,
-                    ((*nvp).size - (*nvp).name_size as i32 - size_of::<NvPair>() as i32 - 1)
-                        as usize,
+                    ((*nvp).size
+                        - (*nvp).name_size as i32
+                        - size_of::<NvPair>() as i32
+                        - 1) as usize,
                 );
                 let cstr = std::ffi::CStr::from_bytes_with_nul_unchecked(slice);
-                let decoded = match cstr.to_str() {
-                    Ok(s) => s,
-                    Err(_) => "<udecodable value>",
-                };
+                let decoded = cstr.to_str().unwrap_or("<undecodable value>");
                 //TODO no idea why some strings come back with leading and
                 //trailing zeros
                 let trimmed = decoded.trim_matches('\u{0}');
@@ -723,7 +668,8 @@ fn extract_nvp(nvp: *const NvPair) -> Result<NVP<'static>, String> {
             }
 
             NvDataType::Uint8Array => {
-                let ua = std::slice::from_raw_parts(v, (*nvp).value_count as usize);
+                let ua =
+                    std::slice::from_raw_parts(v, (*nvp).value_count as usize);
                 result.value = Value::Uint8Array(ua);
                 trace!("  value: {:x?}", ua);
             }
@@ -739,11 +685,14 @@ fn extract_nvp(nvp: *const NvPair) -> Result<NVP<'static>, String> {
     Ok(result)
 }
 
-pub fn ifname_to_addrobj(mut if_name: &str, addr_family: u16)
--> Result<(String, String), String> {
+//TODO this interface should return all information contained in addrobj_rtal_t
+pub fn ifname_to_addrobj(
+    mut if_name: &str,
+    addr_family: u16,
+) -> Result<(String, String), String> {
     let parts: Vec<&str> = if_name.split(':').collect();
     let num = match parts.len() {
-        2 => match i32::from_str_radix(parts[1], 10) {
+        2 => match parts[1].parse::<i32>() {
             Ok(n) => {
                 if_name = parts[0];
                 n
@@ -754,15 +703,15 @@ pub fn ifname_to_addrobj(mut if_name: &str, addr_family: u16)
     };
 
     let mut ia_ifname = [0; 32usize];
-    for (i, _) in if_name.chars().enumerate() {
-        ia_ifname[i] = if_name.as_bytes()[i] as std::os::raw::c_char;
+    for (i, c) in if_name.chars().enumerate() {
+        ia_ifname[i] = c as std::os::raw::c_char;
     }
 
     let request = crate::sys::ipmgmt_aobjop_arg_t {
+        ia_ifname,
         ia_cmd: crate::sys::ipmgmt_door_cmd_type_t_IPMGMT_CMD_LIF2ADDROBJ,
         ia_flags: 0,
         ia_aobjname: [0; 64usize],
-        ia_ifname: ia_ifname,
         ia_lnum: num,
         ia_family: addr_family,
         ia_atype: crate::sys::ipadm_addr_type_t_IPADM_ADDR_NONE,
@@ -771,7 +720,8 @@ pub fn ifname_to_addrobj(mut if_name: &str, addr_family: u16)
     let f = File::open("/etc/svc/volatile/ipadm/ipmgmt_door")
         .map_err(|e| format!("door open: {}", e))?;
 
-    let resp: crate::sys::ipmgmt_aobjop_rval_t = door_call(f.as_raw_fd(), request);
+    let resp: crate::sys::ipmgmt_aobjop_rval_t =
+        door_call(f.as_raw_fd(), request);
 
     let objname = unsafe {
         CStr::from_ptr(resp.ir_aobjname.as_ptr())
@@ -789,4 +739,52 @@ pub fn ifname_to_addrobj(mut if_name: &str, addr_family: u16)
     };
 
     Ok((objname, source.to_string()))
+}
+
+//TODO this interface should return all information contained in addrobj_rtal_t
+//      in a sane way e.g. not a tuple
+pub fn addrobjname_to_addrobj(
+    aobj_name: &str,
+) -> Result<(String, String, u16, String, i32), String> {
+    let mut request = crate::sys::ipmgmt_aobjop_arg_t {
+        ia_cmd: crate::sys::ipmgmt_door_cmd_type_t_IPMGMT_CMD_AOBJNAME2ADDROBJ,
+        ia_flags: 0,
+        ia_aobjname: [0; 64usize],
+        ia_ifname: [0; 32usize],
+        ia_lnum: 0,
+        ia_family: 0,
+        ia_atype: crate::sys::ipadm_addr_type_t_IPADM_ADDR_NONE,
+    };
+    for (i, c) in aobj_name.chars().enumerate() {
+        request.ia_aobjname[i] = c as std::os::raw::c_char;
+    }
+
+    let f = File::open("/etc/svc/volatile/ipadm/ipmgmt_door")
+        .map_err(|e| format!("door open: {}", e))?;
+
+    let resp: crate::sys::ipmgmt_aobjop_rval_t =
+        door_call(f.as_raw_fd(), request);
+
+    let ifname = unsafe {
+        CStr::from_ptr(resp.ir_ifname.as_ptr())
+            .to_str()
+            .map_err(|e| format!("abojname cstr to str: {}", e))?
+            .to_string()
+    };
+
+    let source = match resp.ir_atype {
+        crate::sys::ipadm_addr_type_t_IPADM_ADDR_NONE => "none",
+        crate::sys::ipadm_addr_type_t_IPADM_ADDR_STATIC => "static",
+        crate::sys::ipadm_addr_type_t_IPADM_ADDR_IPV6_ADDRCONF => "addrconf",
+        crate::sys::ipadm_addr_type_t_IPADM_ADDR_DHCP => "dhcp",
+        _ => "?",
+    };
+
+    Ok((
+        aobj_name.to_string(),
+        source.to_string(),
+        resp.ir_family,
+        ifname,
+        resp.ir_lnum,
+    ))
 }
