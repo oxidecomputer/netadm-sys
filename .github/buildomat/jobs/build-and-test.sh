@@ -21,5 +21,7 @@ banner build
 ptime -m cargo build
 ptime -m cargo build --release
 
+cargo fmt -- --check
+
 banner test
 ptime -m cargo test
