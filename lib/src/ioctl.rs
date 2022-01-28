@@ -1280,23 +1280,6 @@ pub(crate) fn create_ip_addr_static(
 
         create_logical_interface(sock, &req)?;
 
-        /*
-        let kernel_ifname = std::ffi::CStr::from_ptr(
-            &mut req.lifr_name[0]).to_str()?;
-
-        let parts: Vec<&str> = kernel_ifname.split(":").collect();
-        let lifnum = match parts.len() {
-            2 => {
-                match i32::from_str_radix(parts[1], 10) {
-                    Ok(n) => n,
-                    Err(_) => 0,
-                }
-            }
-            _ => 0,
-        };
-        */
-
-
         // assign addr
         match addr {
             IpPrefix::V6(a) => {
@@ -1361,56 +1344,6 @@ pub(crate) fn create_ip_addr_static(
             ip::AddrType::Static,
         )?;
 
-        /*
-        // assign name
-        let mut iaa: ip::IpmgmtAobjopArg = std::mem::zeroed();
-        iaa.cmd = ip::IpmgmtCmd::AddrobjLookupAdd;
-        for (i, c) in objname.as_ref().chars().enumerate() {
-            iaa.objname[i] = c as i8;
-        }
-        for (i, c) in ifname.as_ref().chars().enumerate() {
-            iaa.ifname[i] = c as i8;
-        }
-        iaa.family = match addr {
-            IpPrefix::V6(_) => AF_INET6 as u16,
-            IpPrefix::V4(_) => AF_INET as u16,
-        };
-        iaa.atype = ip::AddrType::Static;
-
-        let f = File::open("/etc/svc/volatile/ipadm/ipmgmt_door")?;
-
-        let mut response: *mut ip::IpmgmtRval = malloc(std::mem::size_of::<
-            ip::IpmgmtRval,
-        >()) as *mut ip::IpmgmtRval;
-
-        door_callp(f.as_raw_fd(), iaa, &mut response);
-        free(response as *mut c_void);
-
-    
-        iaa = std::mem::zeroed();
-        iaa.cmd = ip::IpmgmtCmd::AddrobjSetLifnum;
-        for (i, c) in objname.as_ref().chars().enumerate() {
-            iaa.objname[i] = c as i8;
-        }
-        for (i, c) in ifname.as_ref().chars().enumerate() {
-            iaa.ifname[i] = c as i8;
-        }
-        iaa.lnum = lifnum;
-        let family = match addr {
-            IpPrefix::V6(_) => AF_INET6 as u16,
-            IpPrefix::V4(_) => AF_INET as u16,
-        };
-        iaa.family = family;
-        iaa.atype = ip::AddrType::Static;
-
-        let mut response: *mut ip::IpmgmtRval = malloc(std::mem::size_of::<
-            ip::IpmgmtRval,
-        >()) as *mut ip::IpmgmtRval;
-
-        door_callp(f.as_raw_fd(), iaa, &mut response);
-        free(response as *mut c_void);
-        */
-
         // set up
         
         let mut req: sys::lifreq = std::mem::zeroed();
@@ -1427,74 +1360,6 @@ pub(crate) fn create_ip_addr_static(
         // ipmgmtd persist .. kindof
         ipmgmtd_persist(
             objname.as_ref(), ifname.as_ref(), lifnum, Some(addr), &f)?;
-
-        // persist.... kindof
-        /*
-        let mut nvl = nvpair::NvList::new_unique_names();
-        nvl.insert("_ifname", ifname.as_ref())?;
-        nvl.insert("_aobjname", objname.as_ref())?;
-        nvl.insert("_lifnum", &(lifnum as i32))?;
-
-        let ahname = match addr {
-            IpPrefix::V6(a) => a.addr.to_string(),
-            IpPrefix::V4(a) => a.addr.to_string(),
-        };
-
-        let mut addr_nvl = nvpair::NvList::new_unique_names();
-        addr_nvl.insert("_aname", ahname.as_str())?;
-
-        let addr_nvl_name = match addr {
-            IpPrefix::V6(_) => "_ipv6addr",
-            IpPrefix::V4(_) => "_ipv4addr",
-        };
-
-        nvl.insert(addr_nvl_name, addr_nvl.as_ref())?;
-        nvl.insert("up", "yes")?;
-
-        let nvl_c = nvl.as_mut_ptr();
-        let mut nvl_buf: *mut c_char = std::ptr::null_mut();
-        let mut nvl_sz: nvpair_sys::size_t = 0;
-        let ret = nvpair_sys::nvlist_pack(
-            nvl_c,
-            &mut nvl_buf,
-            &mut nvl_sz,
-            nvpair_sys::NV_ENCODE_NATIVE,
-            0,
-        );
-        if ret != 0 {
-            return Err(Error::NvPair(format!("{}", ret)));
-        }
-
-        let arg = ip::IpmgmtSetAddr{
-            cmd: ip::IpmgmtCmd::SetAddr,
-            flags: sys::IPMGMT_ACTIVE,
-            nvlsize: nvl_sz as u32,
-        };
-
-        let mut buf: Vec<c_char> = Vec::new();
-
-        let arg_bytes = std::slice::from_raw_parts(
-            (&arg as *const ip::IpmgmtSetAddr) as *const c_char,
-            size_of::<ip::IpmgmtSetAddr>(),
-        );
-        for c in arg_bytes {
-            buf.push(*c);
-        }
-
-        let nvl_bytes = std::slice::from_raw_parts(nvl_buf, nvl_sz as usize);
-        for c in nvl_bytes {
-            buf.push(*c);
-        }
-
-        let resp: ip::IpmgmtRval = door_call_slice(
-            f.as_raw_fd(),
-            buf.as_slice(),
-        );
-        if resp.err != 0 {
-            return Err(Error::Ipmgmtd(
-                    format!("{}", sys::err_string(resp.err))));
-        }
-        */
 
         //TODO duplicate address detection
         //let rtsock = socket(libc::AF_ROUTE, libc::SOCK_RAW, family as i32);

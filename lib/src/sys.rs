@@ -1,6 +1,7 @@
 // Copyright 2021 Oxide Computer Company
 
-// import generated bindings
+// For the moment, the code in this file stylistically follows c conventions
+// more than rust, for this reason the following warnings are disabled.
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
@@ -8,7 +9,6 @@
 #![allow(dead_code)]
 #![allow(deref_nullptr)]
 #![allow(unaligned_references)]
-//include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 use libc::{
     sockaddr_storage,
@@ -274,7 +274,6 @@ pub const SIOCGLIFCONF: i32 =       IOWRN!('i', 165, 16) as i32;
 pub const SIOCGLIFDADSTATE: i32 =   IOWR!('i',  190, lifreq) as i32;
 pub const SIOCSLIFPREFIX: i32 =     IOWR!('i',  191, lifreq) as i32;
 
-//#define	SIMNETIOC(cmdid)	DLD_IOC_CMD(SIMNET_IOC, (cmdid))
 macro_rules! SIMNETIOC {
     ($cmdid:expr) => {
         DLD_IOC_CMD!(SIMNET_IOC, $cmdid)
@@ -285,7 +284,6 @@ pub const SIMNET_IOC_DELETE: i32 =	SIMNETIOC!(2);
 pub const SIMNET_IOC_INFO: i32 = SIMNETIOC!(3);
 pub const SIMNET_IOC_MODIFY: i32 = SIMNETIOC!(4);
 
-//#define	VNICIOC(cmdid)		DLD_IOC_CMD(VNIC_IOC, (cmdid))
 macro_rules! VNICIOC {
     ($cmdid:expr) => {
         DLD_IOC_CMD!(VNIC_IOC, $cmdid)
