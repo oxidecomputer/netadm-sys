@@ -16,5 +16,5 @@ nvpair-sys = { git = "https://github.com/jmesmon/rust-libzfs", branch = "master"
 #nvpair = "0.5"
 #nvpair-sys = "0.4"
 
-dlpi = { git = "ssh://git@github.com/oxidecomputer/dlpi-sys" }
-rusty-doors = { git = "ssh://git@github.com/oxidecomputer/rusty-doors" }
+dlpi = { git = "https://github.com/oxidecomputer/dlpi-sys" }
+rusty-doors = { git = "https://github.com/oxidecomputer/rusty-doors" }

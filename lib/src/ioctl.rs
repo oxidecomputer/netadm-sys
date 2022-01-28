@@ -882,7 +882,7 @@ pub struct IfSpec {
 
 /// Parse a interface specification with the following format.
 ///
-///     <name>[ppa][:lun]
+/// <name>[ppa][:lun]
 ///
 /// - name: name of the device
 /// - ppa: physical point of attachment (integer)
