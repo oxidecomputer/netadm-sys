@@ -14,7 +14,7 @@ use tracing::debug;
 /// state.
 pub mod ip;
 
-/// Structures and functions for interacting with link-layer network 
+/// Structures and functions for interacting with link-layer network
 /// configuration and state.
 pub mod link;
 
@@ -22,10 +22,10 @@ pub mod link;
 /// state.
 pub mod route;
 
-mod nvlist;
-mod ndpd;
 mod ioctl;
 mod kstat;
+mod ndpd;
+mod nvlist;
 mod sys;
 
 /// Error variants returned by netadm_sys.

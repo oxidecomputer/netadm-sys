@@ -46,25 +46,30 @@ pub const LIFC_ALLZONES: u32 = 8;
 pub const LIFC_UNDER_IPMP: u32 = 16;
 pub const LIFC_ENABLED: u32 = 32;
 
-pub const DLD_IOC: i32 = 0x0D1D;
-pub const AGGR_IOC: i32 = 0x0A66;
-pub const VNIC_IOC: i32 = 0x0171;
-pub const SIMNET_IOC: i32 = 0x5132;
-pub const IPTUN_IOC: i32 = 0x454A;
-pub const BRIDGE_IOC: i32 = 0xB81D;
-pub const IBPART_IOC: i32 = 0x6171;
+#[cfg(target_os = "linux")]
+type ioc_t = u64;
+#[cfg(target_os = "illumos")]
+type ioc_t = i32;
+
+pub const DLD_IOC: ioc_t = 0x0D1D;
+pub const AGGR_IOC: ioc_t = 0x0A66;
+pub const VNIC_IOC: ioc_t = 0x0171;
+pub const SIMNET_IOC: ioc_t = 0x5132;
+pub const IPTUN_IOC: ioc_t = 0x454A;
+pub const BRIDGE_IOC: ioc_t = 0xB81D;
+pub const IBPART_IOC: ioc_t = 0x6171;
 
 pub const IOCPARM_MASK: u32 = 0xff;
 pub const IOC_OUT: u32 = 0x40000000;
 pub const IOC_IN: u32 = 0x80000000;
 pub const IOC_INOUT: u32 = IOC_OUT | IOC_IN;
 
-pub const STR: i32 = ('S' as i32) << 8;
-pub const I_PUSH: i32 = STR | 0o2;
-pub const I_POP: i32 = STR | 0o3;
-pub const I_PLINK: i32 = STR | 0o26;
-pub const I_PUNLINK: i32 = STR | 0o27;
-pub const I_STR: i32 = STR | 0o10;
+pub const STR: ioc_t = ('S' as ioc_t) << 8;
+pub const I_PUSH: ioc_t = STR | 0o2;
+pub const I_POP: ioc_t = STR | 0o3;
+pub const I_PLINK: ioc_t = STR | 0o26;
+pub const I_PUNLINK: ioc_t = STR | 0o27;
+pub const I_STR: ioc_t = STR | 0o10;
 
 pub const IP_MOD_NAME: &[u8; 3] = b"ip\0";
 pub const ARP_MOD_NAME: &[u8; 4] = b"arp\0";
@@ -243,41 +248,41 @@ impl strioctl {
 
 pub const LIFNAMSIZ: usize = 32;
 
-pub const DLDIOC_MACADDRGET: i32 = DLDIOC!(0x15);
-pub const SIOCLIFREMOVEIF: i32 = IOW!('i', 110, lifreq) as i32;
-pub const SIOCLIFADDIF: i32 = IOWR!('i', 111, lifreq) as i32;
-pub const SIOCSLIFADDR: i32 = IOW!('i', 112, lifreq) as i32;
-pub const SIOCGLIFADDR: i32 = IOWR!('i', 113, lifreq) as i32;
-pub const SIOCSLIFFLAGS: i32 = IOW!('i', 116, lifreq) as i32;
-pub const SIOCGLIFFLAGS: i32 = IOWR!('i', 117, lifreq) as i32;
-pub const SIOCGLIFNETMASK: i32 = IOWR!('i', 125, lifreq) as i32;
-pub const SIOCSLIFNETMASK: i32 = IOW!('i', 126, lifreq) as i32;
-pub const SIOCSLIFNAME: i32 = IOWR!('i', 129, lifreq) as i32;
-pub const SIOCGLIFNUM: i32 = IOWR!('i', 130, lifnum) as i32;
-pub const SIOCGLIFINDEX: i32 = IOWR!('i', 133, lifreq) as i32;
-pub const SIOCGLIFCONF: i32 = IOWRN!('i', 165, 16) as i32;
-pub const SIOCGLIFDADSTATE: i32 = IOWR!('i', 190, lifreq) as i32;
-pub const SIOCSLIFPREFIX: i32 = IOWR!('i', 191, lifreq) as i32;
+pub const DLDIOC_MACADDRGET: ioc_t = DLDIOC!(0x15);
+pub const SIOCLIFREMOVEIF: ioc_t = IOW!('i', 110, lifreq) as ioc_t;
+pub const SIOCLIFADDIF: ioc_t = IOWR!('i', 111, lifreq) as ioc_t;
+pub const SIOCSLIFADDR: ioc_t = IOW!('i', 112, lifreq) as ioc_t;
+pub const SIOCGLIFADDR: ioc_t = IOWR!('i', 113, lifreq) as ioc_t;
+pub const SIOCSLIFFLAGS: ioc_t = IOW!('i', 116, lifreq) as ioc_t;
+pub const SIOCGLIFFLAGS: ioc_t = IOWR!('i', 117, lifreq) as ioc_t;
+pub const SIOCGLIFNETMASK: ioc_t = IOWR!('i', 125, lifreq) as ioc_t;
+pub const SIOCSLIFNETMASK: ioc_t = IOW!('i', 126, lifreq) as ioc_t;
+pub const SIOCSLIFNAME: ioc_t = IOWR!('i', 129, lifreq) as ioc_t;
+pub const SIOCGLIFNUM: ioc_t = IOWR!('i', 130, lifnum) as ioc_t;
+pub const SIOCGLIFINDEX: ioc_t = IOWR!('i', 133, lifreq) as ioc_t;
+pub const SIOCGLIFCONF: ioc_t = IOWRN!('i', 165, 16) as ioc_t;
+pub const SIOCGLIFDADSTATE: ioc_t = IOWR!('i', 190, lifreq) as ioc_t;
+pub const SIOCSLIFPREFIX: ioc_t = IOWR!('i', 191, lifreq) as ioc_t;
 
 macro_rules! SIMNETIOC {
     ($cmdid:expr) => {
         DLD_IOC_CMD!(SIMNET_IOC, $cmdid)
     };
 }
-pub const SIMNET_IOC_CREATE: i32 = SIMNETIOC!(1);
-pub const SIMNET_IOC_DELETE: i32 = SIMNETIOC!(2);
-pub const SIMNET_IOC_INFO: i32 = SIMNETIOC!(3);
-pub const SIMNET_IOC_MODIFY: i32 = SIMNETIOC!(4);
+pub const SIMNET_IOC_CREATE: ioc_t = SIMNETIOC!(1);
+pub const SIMNET_IOC_DELETE: ioc_t = SIMNETIOC!(2);
+pub const SIMNET_IOC_INFO: ioc_t = SIMNETIOC!(3);
+pub const SIMNET_IOC_MODIFY: ioc_t = SIMNETIOC!(4);
 
 macro_rules! VNICIOC {
     ($cmdid:expr) => {
         DLD_IOC_CMD!(VNIC_IOC, $cmdid)
     };
 }
-pub const VNIC_IOC_CREATE: i32 = VNICIOC!(1);
-pub const VNIC_IOC_DELETE: i32 = VNICIOC!(2);
-pub const VNIC_IOC_INFO: i32 = VNICIOC!(3);
-pub const VNIC_IOC_MODIFY: i32 = VNICIOC!(4);
+pub const VNIC_IOC_CREATE: ioc_t = VNICIOC!(1);
+pub const VNIC_IOC_DELETE: ioc_t = VNICIOC!(2);
+pub const VNIC_IOC_INFO: ioc_t = VNICIOC!(3);
+pub const VNIC_IOC_MODIFY: ioc_t = VNICIOC!(4);
 
 //TODO work to get ipmgmt types exported by illumos, but not with ipadm types in
 //the mix, this will require some work on the ipmgmt data structures to
@@ -509,7 +514,7 @@ impl Default for ipmgmt_aobjop_rval_t {
                         sin6_flowinfo: 0,
                         sin6_addr: in6_addr { s6_addr: [0; 16] },
                         sin6_scope_id: 0,
-                        __sin6_src_id: 0,
+                        ..unsafe { std::mem::zeroed() }
                     },
                 },
             },

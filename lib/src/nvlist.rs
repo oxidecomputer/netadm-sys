@@ -47,7 +47,7 @@ pub struct NvPriv {
 #[repr(u8)]
 pub enum Encoding {
     Native = 0,
-    XDR = 1,
+    Xdr = 1,
 }
 
 #[allow(dead_code)]
@@ -58,6 +58,7 @@ pub enum Endian {
     LittleEndian = 1,
 }
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug)]
 pub struct NVP<'a> {
     pub name: &'a str,
@@ -89,7 +90,7 @@ pub enum Value<'a> {
     HRTime, //TODO
     NvList(Vec<NVP<'a>>),
     NvListArray, //TODO
-    BooleanValue(bool),
+    BooleanVal(bool),
     Int8(i8),
     Uint8(u8),
     BooleanArray(&'a [bool]),

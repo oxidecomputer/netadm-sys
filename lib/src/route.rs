@@ -267,7 +267,7 @@ fn mod_route(
                         s6_addr: p.addr.octets(),
                     },
                     sin6_scope_id: 0,
-                    __sin6_src_id: 0,
+                    ..std::mem::zeroed()
                 };
                 buf.extend_from_slice(from_raw_parts(
                     (&sa as *const sockaddr_in6) as *const u8,
@@ -300,7 +300,7 @@ fn mod_route(
                         s6_addr: a.octets(),
                     },
                     sin6_scope_id: 0,
-                    __sin6_src_id: 0,
+                    ..std::mem::zeroed()
                 };
                 buf.extend_from_slice(from_raw_parts(
                     (&sa as *const sockaddr_in6) as *const u8,
@@ -339,7 +339,7 @@ fn mod_route(
                         s6_addr: mask.to_be().to_be_bytes(),
                     },
                     sin6_scope_id: 0,
-                    __sin6_src_id: 0,
+                    ..std::mem::zeroed()
                 };
                 buf.extend_from_slice(from_raw_parts(
                     (&sa as *const sockaddr_in6) as *const u8,

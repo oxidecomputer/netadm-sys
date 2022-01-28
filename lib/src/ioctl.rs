@@ -415,7 +415,7 @@ pub(crate) fn get_ipaddrs() -> Result<BTreeMap<String, Vec<IpInfo>>, Error> {
                 | sys::LIFC_UNDER_IPMP) as i32,
             lifc_len: lifn.lifn_count * size_of::<sys::lifreq>() as i32,
             lifc_lifcu: sys::lifconf_lifcu {
-                lifcu_buf: ifs.as_mut_ptr() as *mut i8,
+                lifcu_buf: ifs.as_mut_ptr() as *mut c_char,
             },
         };
 
@@ -457,7 +457,7 @@ pub(crate) fn ipaddr_exists(objname: impl AsRef<str>) -> Result<bool, Error> {
     let mut req: ip::IpmgmtAobjopArg = unsafe { std::mem::zeroed() };
     req.cmd = ip::IpmgmtCmd::AobjName2Addrobj;
     for (i, c) in objname.as_ref().chars().enumerate() {
-        req.objname[i] = c as i8;
+        req.objname[i] = c as c_char;
     }
 
     let mut response: *mut ip::IpmgmtAobjopRval = unsafe {
@@ -496,7 +496,7 @@ pub(crate) fn delete_ipaddr(objname: impl AsRef<str>) -> Result<(), Error> {
     let mut req: ip::IpmgmtAobjopArg = unsafe { std::mem::zeroed() };
     req.cmd = ip::IpmgmtCmd::AobjName2Addrobj;
     for (i, c) in objname.as_ref().chars().enumerate() {
-        req.objname[i] = c as i8;
+        req.objname[i] = c as c_char;
     }
 
     let mut response: *mut ip::IpmgmtAobjopRval = unsafe {
@@ -525,10 +525,10 @@ pub(crate) fn delete_ipaddr(objname: impl AsRef<str>) -> Result<(), Error> {
         i += 1;
     }
     if resp.lnum != 0 {
-        ior.lifr_name[i] = ':' as i8;
+        ior.lifr_name[i] = ':' as c_char;
         i += 1;
         for c in resp.lnum.to_string().chars() {
-            ior.lifr_name[i] = c as i8;
+            ior.lifr_name[i] = c as c_char;
             i += 1;
         }
     }
@@ -606,7 +606,7 @@ pub(crate) fn delete_ipaddr(objname: impl AsRef<str>) -> Result<(), Error> {
     ia.flags = sys::IPMGMT_ACTIVE;
     ia.lnum = resp.lnum as u32;
     for (i, c) in objname.as_ref().chars().enumerate() {
-        ia.objname[i] = c as i8;
+        ia.objname[i] = c as c_char;
     }
 
     // delete the address from ipmgmtd
@@ -679,7 +679,7 @@ pub(crate) fn create_ipaddr(
 fn is_plumbed_for_af(name: &str, sock: i32) -> bool {
     let mut req = crate::sys::lifreq::new();
     for (i, c) in name.chars().enumerate() {
-        req.lifr_name[i] = c as i8
+        req.lifr_name[i] = c as c_char;
     }
     let ret = unsafe { ioctl(sock, sys::SIOCGLIFFLAGS, &req) };
     ret == 0
@@ -725,7 +725,7 @@ fn plumb_for_af(name: &str, ifflags: u64) -> Result<(), Error> {
     req.lifr_lifru1.lifru_ppa = spec.ppa;
 
     for (i, c) in name.chars().enumerate() {
-        req.lifr_name[i] = c as i8;
+        req.lifr_name[i] = c as c_char;
     }
     if unsafe { ioctl(ip_fd, sys::SIOCSLIFNAME, &req) } == -1 {
         dlpi::close(ip_h);
@@ -819,7 +819,7 @@ fn plumb_for_af(name: &str, ifflags: u64) -> Result<(), Error> {
     let arg = &mut req as *mut sys::lifreq as *mut c_char;
     let ret = str_ioctl(
         arp_fd,
-        sys::SIOCSLIFNAME,
+        sys::SIOCSLIFNAME as i32,
         arg,
         size_of::<sys::lifreq>() as c_int,
     );
@@ -936,7 +936,7 @@ pub fn get_ipaddr_info(name: &str) -> Result<IpInfo, Error> {
 
         let mut req = sys::lifreq::new();
         for (i, c) in ifname.chars().enumerate() {
-            req.lifr_name[i] = c as i8;
+            req.lifr_name[i] = c as c_char;
         }
 
         // get addr
@@ -1079,7 +1079,7 @@ pub fn create_ip_addr_linklocal(
 ) -> Result<(), Error> {
     let mut req = sys::lifreq::default();
     for (i, c) in ifname.chars().enumerate() {
-        req.lifr_name[i] = c as i8;
+        req.lifr_name[i] = c as c_char;
     }
     let (lifnum, kernel_ifname) = create_logical_interface(sock, &req)?;
 
@@ -1133,7 +1133,7 @@ pub fn create_ip_addr_linklocal(
         // ensure interface is up
         let mut req: sys::lifreq = std::mem::zeroed();
         for (i, c) in kernel_ifname.chars().enumerate() {
-            req.lifr_name[i] = c as i8;
+            req.lifr_name[i] = c as c_char;
         }
         let ret = ioctl(sock, sys::SIOCGLIFFLAGS, &req);
         if ret < 0 {
@@ -1226,7 +1226,7 @@ pub(crate) fn create_ip_addr_static(
     unsafe {
         let mut req: sys::lifreq = std::mem::zeroed();
         for (i, c) in ifname.as_ref().chars().enumerate() {
-            req.lifr_name[i] = c as i8;
+            req.lifr_name[i] = c as c_char;
         }
 
         create_logical_interface(sock, &req)?;
@@ -1302,7 +1302,7 @@ pub(crate) fn create_ip_addr_static(
 
         let mut req: sys::lifreq = std::mem::zeroed();
         for (i, c) in kernel_ifname.chars().enumerate() {
-            req.lifr_name[i] = c as i8;
+            req.lifr_name[i] = c as c_char;
         }
         req.lifr_lifru.lifru_flags |= sys::IFF_UP as u64;
         let ret = ioctl(sock, sys::SIOCSLIFFLAGS, &req);
@@ -1341,10 +1341,10 @@ fn add_if_to_ipmgmtd(
     let mut iaa: ip::IpmgmtAobjopArg = unsafe { std::mem::zeroed() };
     iaa.cmd = ip::IpmgmtCmd::AddrobjLookupAdd;
     for (i, c) in objname.chars().enumerate() {
-        iaa.objname[i] = c as i8;
+        iaa.objname[i] = c as c_char;
     }
     for (i, c) in ifname.chars().enumerate() {
-        iaa.ifname[i] = c as i8;
+        iaa.ifname[i] = c as c_char;
     }
     iaa.family = af;
     iaa.atype = kind;
@@ -1365,10 +1365,10 @@ fn add_if_to_ipmgmtd(
     iaa = unsafe { std::mem::zeroed() };
     iaa.cmd = ip::IpmgmtCmd::AddrobjSetLifnum;
     for (i, c) in objname.chars().enumerate() {
-        iaa.objname[i] = c as i8;
+        iaa.objname[i] = c as c_char;
     }
     for (i, c) in ifname.chars().enumerate() {
-        iaa.ifname[i] = c as i8;
+        iaa.ifname[i] = c as c_char;
     }
     iaa.lnum = lifnum;
     let family = af;

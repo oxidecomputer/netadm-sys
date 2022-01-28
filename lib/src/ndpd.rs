@@ -35,7 +35,7 @@ impl Msg {
                 sin6_flowinfo: 0,
                 sin6_addr: libc::in6_addr { s6_addr: [0; 16] },
                 sin6_scope_id: 0,
-                __sin6_src_id: 0,
+                ..unsafe { std::mem::zeroed() }
             },
             intfidlen: 0,
             stateless: sys::boolean_t_B_FALSE,
