@@ -93,6 +93,7 @@ pub(crate) fn connect_simnet_peers(
     }
 }
 
+#[allow(dead_code)]
 #[repr(i32)]
 pub enum VnicMacAddrType {
     Unknown = -1,
@@ -104,6 +105,7 @@ pub enum VnicMacAddrType {
     Vrid,
 }
 
+#[allow(dead_code)]
 #[repr(i32)]
 pub enum MacPriorityLevel {
     Low,
@@ -112,6 +114,7 @@ pub enum MacPriorityLevel {
     Reset,
 }
 
+#[allow(dead_code)]
 #[repr(i32)]
 pub enum MacCpuMode {
     Fanout = 1,
@@ -205,6 +208,7 @@ pub struct MacIpaddr {
     pub netmask: u8,
 }
 
+#[allow(dead_code)]
 #[derive(Copy, Clone)]
 #[repr(i32)]
 pub enum MacDhcpCidFrom {
@@ -1520,6 +1524,7 @@ pub struct SimnetIocCreate {
     pub mac_addr: [u8; sys::MAXMACADDRLEN as usize],
 }
 
+#[allow(dead_code)]
 #[repr(i32)]
 pub enum VnicIocDiag {
     _None,

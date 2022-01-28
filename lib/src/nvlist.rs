@@ -2,6 +2,7 @@
 
 use std::os::raw::c_void;
 
+#[allow(dead_code)]
 #[derive(Debug)]
 #[repr(C)]
 pub struct NvList {
@@ -41,6 +42,7 @@ pub struct NvPriv {
     pub curr: *mut Nvp,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 #[repr(u8)]
 pub enum Encoding {
@@ -48,6 +50,7 @@ pub enum Encoding {
     XDR = 1,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 #[repr(u8)]
 pub enum Endian {
@@ -61,6 +64,7 @@ pub struct NVP<'a> {
     pub value: Value<'a>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum Value<'a> {
     DontCare,
@@ -93,6 +97,7 @@ pub enum Value<'a> {
     Uint8Array(&'a [u8]),
 }
 
+#[allow(dead_code)]
 #[derive(Debug, PartialEq)]
 #[repr(i32)]
 pub enum NvDataType {
@@ -146,12 +151,14 @@ pub struct Nvp {
     pub nvp: NvPair,
 }
 
+#[allow(dead_code)]
 #[repr(C)]
 pub struct NvAlloc {
     pub ops: *mut NvOps,
     pub arg: *mut c_void,
 }
 
+#[allow(dead_code)]
 #[repr(C)]
 pub struct NvOps {
     pub init: fn(*mut NvAlloc), //WARNING: no va_list here

@@ -7,12 +7,13 @@ controlled programmatically from user space as it is an abstraction for other
 Rust-based systems to use. In the near to mid term this crate will be highly
 unstable.
 
-**update** the direction for this crate is starting to take shape, and is
+**Update:** the direction for this crate is starting to take shape, and is
 described below.
 
 # Direction
 
-## Current
+## Where things are at today
+
 Currently, the primary entry points to programmatic access and control of network
 configuration and state are `libdladm` and `libipadm`. However, these are both
 private libraries, are are more extensions of the programs `dladm` and `ipadm`
@@ -53,7 +54,9 @@ what I have seen so far. Active state in user space is tracked in
 The following is a two phase proposal to establish a stable network API on
 illumos.
 
-## Phase 1
+## Moving forward
+
+### Phase 1
 
 The first phase involves establishing the API and it's underlying implementation
 in `libnet`. In this phase `libnet` will be developed to support several
@@ -96,7 +99,7 @@ today.
 daemon component. Applications will use `libnet` by consuming the library
 interfaces directly from their own code.
 
-## Phase 2
+### Phase 2
 
 ```
                                             ┌──────────┐

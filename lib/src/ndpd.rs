@@ -4,6 +4,7 @@ use std::os::unix::net::UnixStream;
 
 use crate::sys;
 
+#[allow(dead_code)]
 #[repr(C)]
 pub enum Cmd {
     DisableAutoconf,
@@ -85,6 +86,7 @@ fn send(msg: &Msg) -> std::io::Result<()> {
     }
 }
 
+#[allow(dead_code)]
 pub fn enable_autoconf(ifname: &str) -> std::io::Result<()> {
     let mut msg = Msg::new(Cmd::EnableAutoconf);
     msg.ifname[..ifname.len()].copy_from_slice(ifname.as_bytes());

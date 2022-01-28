@@ -10,15 +10,25 @@ use std::str::FromStr;
 use thiserror::Error;
 use tracing::debug;
 
-pub mod ioctl;
+/// Structures and functions for interacting with IP network configuration and
+/// state.
 pub mod ip;
-pub mod kstat;
+
+/// Structures and functions for interacting with link-layer network 
+/// configuration and state.
 pub mod link;
-pub mod ndpd;
-pub mod nvlist;
+
+/// Structures and functions for interacting with routing configuration and
+/// state.
 pub mod route;
+
+mod nvlist;
+mod ndpd;
+mod ioctl;
+mod kstat;
 mod sys;
 
+/// Error variants returned by netadm_sys.
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("not implemented")]
