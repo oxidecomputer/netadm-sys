@@ -4,19 +4,19 @@ use colored::*;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::net::IpAddr;
-use std::str::FromStr;
-use tracing::debug;
-use std::net::{Ipv4Addr, Ipv6Addr, AddrParseError};
+use std::net::{AddrParseError, Ipv4Addr, Ipv6Addr};
 use std::num::ParseIntError;
+use std::str::FromStr;
 use thiserror::Error;
+use tracing::debug;
 
 pub mod ioctl;
 pub mod ip;
 pub mod kstat;
 pub mod link;
+pub mod ndpd;
 pub mod nvlist;
 pub mod route;
-pub mod ndpd;
 mod sys;
 
 #[derive(thiserror::Error, Debug)]
@@ -49,13 +49,11 @@ pub enum Error {
     Route(#[from] route::Error),
     #[error("ndp error: {0}")]
     Ndp(String),
-
 }
 
 impl Into<std::io::Error> for Error {
     fn into(self) -> std::io::Error {
-        std::io::Error::new(std::io::ErrorKind::Other, 
-            self.to_string())
+        std::io::Error::new(std::io::ErrorKind::Other, self.to_string())
     }
 }
 
@@ -74,7 +72,9 @@ impl Display for LinkFlags {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             LinkFlags::Active => write!(f, "{}", "active".bright_green()),
-            LinkFlags::Persistent => write!(f, "{}", "persistent".bright_blue()),
+            LinkFlags::Persistent => {
+                write!(f, "{}", "persistent".bright_blue())
+            }
             LinkFlags::ActivePersistent => write!(
                 f,
                 "{} {}",
@@ -200,7 +200,10 @@ pub fn linkname_to_id(name: &String) -> Result<u32, Error> {
 ///
 /// Simnet links are used in paris. When a pair of simnet links is created,
 /// whaterver ingreses into one flows to the other.
-pub fn create_simnet_link(name: &String, flags: LinkFlags) -> Result<LinkInfo, Error> {
+pub fn create_simnet_link(
+    name: &String,
+    flags: LinkFlags,
+) -> Result<LinkInfo, Error> {
     debug!("creating simnet link {}", name);
     crate::link::create_simnet_link(name, flags)
 }
@@ -231,7 +234,10 @@ pub fn delete_link(handle: &LinkHandle, flags: LinkFlags) -> Result<(), Error> {
 /// Connect two simnet peers.
 ///
 /// This means packets that ingress `a` will egress `a` to `b` and vice versa.
-pub fn connect_simnet_peers(a: &LinkHandle, b: &LinkHandle) -> Result<(), Error> {
+pub fn connect_simnet_peers(
+    a: &LinkHandle,
+    b: &LinkHandle,
+) -> Result<(), Error> {
     let a_id = a.id()?;
     let b_id = b.id()?;
 
@@ -289,31 +295,21 @@ pub fn create_ipaddr(
     name: impl AsRef<str>,
     addr: IpPrefix,
 ) -> Result<(), Error> {
-
     crate::ioctl::create_ipaddr(name, addr)
 }
 
 /// Enable generation of an IPv6 link-local address for an interface
-pub fn enable_v6_link_local(
-    name: impl AsRef<str>,
-) -> Result<(), Error> {
-
+pub fn enable_v6_link_local(name: impl AsRef<str>) -> Result<(), Error> {
     crate::ioctl::enable_v6_link_local(name.as_ref())
 }
 
 /// Delete an IP address with the given address object name.
-pub fn delete_ipaddr(
-    name: impl AsRef<str>,
-) -> Result<(), Error> {
-
+pub fn delete_ipaddr(name: impl AsRef<str>) -> Result<(), Error> {
     crate::ioctl::delete_ipaddr(name)
 }
 
 /// Check if an IP address with the given address object name exists.
-pub fn ipaddr_exists(
-    name: impl AsRef<str>,
-) -> Result<bool, Error> {
-
+pub fn ipaddr_exists(name: impl AsRef<str>) -> Result<bool, Error> {
     crate::ioctl::ipaddr_exists(name)
 }
 
@@ -321,17 +317,11 @@ pub fn ipaddr_exists(
 
 /// Get all routes present on the system.
 pub fn get_routes() -> Result<Vec<crate::route::Route>, Error> {
-
     Ok(crate::route::get_routes()?)
-
 }
 
 /// Add a route to `destination` via `gateway`.
-pub fn add_route(
-    destination: IpPrefix,
-    gateway: IpAddr,
-) -> Result<(), Error> {
-
+pub fn add_route(destination: IpPrefix, gateway: IpAddr) -> Result<(), Error> {
     Ok(crate::route::add_route(destination, gateway)?)
 }
 
@@ -343,7 +333,6 @@ pub fn ensure_route_present(
     destination: IpPrefix,
     gateway: IpAddr,
 ) -> Result<(), Error> {
-
     Ok(crate::route::ensure_route_present(destination, gateway)?)
 }
 
@@ -352,10 +341,8 @@ pub fn delete_route(
     destination: IpPrefix,
     gateway: IpAddr,
 ) -> Result<(), Error> {
-
     Ok(crate::route::delete_route(destination, gateway)?)
 }
-
 
 /// An IP prefix is the leading bits of an IP address combined with a prefix
 /// length indicating the number of leading bits that are significant.
@@ -369,12 +356,10 @@ impl FromStr for IpPrefix {
     type Err = IpPrefixParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-
         match Ipv6Prefix::from_str(s) {
             Ok(a) => return Ok(IpPrefix::V6(a)),
-            _ => Ok(IpPrefix::V4(Ipv4Prefix::from_str(s)?))
+            _ => Ok(IpPrefix::V4(Ipv4Prefix::from_str(s)?)),
         }
-
     }
 }
 
@@ -411,17 +396,15 @@ impl FromStr for Ipv6Prefix {
     type Err = IpPrefixParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-
         let parts: Vec<&str> = s.split("/").collect();
         if parts.len() < 2 {
             return Err(IpPrefixParseError::Cidr);
         }
 
-        Ok(Ipv6Prefix{
+        Ok(Ipv6Prefix {
             addr: Ipv6Addr::from_str(parts[0])?,
             mask: u8::from_str(parts[1])?,
         })
-
     }
 }
 
@@ -429,17 +412,15 @@ impl FromStr for Ipv4Prefix {
     type Err = IpPrefixParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-
         let parts: Vec<&str> = s.split("/").collect();
         if parts.len() < 2 {
             return Err(IpPrefixParseError::Cidr);
         }
 
-        Ok(Ipv4Prefix{
+        Ok(Ipv4Prefix {
             addr: Ipv4Addr::from_str(parts[0])?,
             mask: u8::from_str(parts[1])?,
         })
-
     }
 }
 

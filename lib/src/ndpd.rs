@@ -1,6 +1,6 @@
-use std::os::unix::net::UnixStream;
+use std::io::{Error, Read, Write};
 use std::mem::size_of;
-use std::io::{Read, Write, Error};
+use std::os::unix::net::UnixStream;
 
 use crate::sys;
 
@@ -25,16 +25,14 @@ struct Msg {
 
 impl Msg {
     fn new(cmd: Cmd) -> Self {
-        Msg{
+        Msg {
             cmd: cmd,
             ifname: [0; sys::LIFNAMSIZ],
             intfid: libc::sockaddr_in6 {
                 sin6_family: 0,
                 sin6_port: 0,
                 sin6_flowinfo: 0,
-                sin6_addr: libc::in6_addr {
-                    s6_addr: [0;16],
-                },
+                sin6_addr: libc::in6_addr { s6_addr: [0; 16] },
                 sin6_scope_id: 0,
                 __sin6_src_id: 0,
             },
@@ -47,7 +45,6 @@ impl Msg {
 }
 
 fn send(msg: &Msg) -> std::io::Result<()> {
-
     let mut sock = UnixStream::connect("/var/run/in.ndpd_ipadm")?;
 
     // This is what dladm does, but here it crashes ndpd, i think this may be
@@ -86,7 +83,6 @@ fn send(msg: &Msg) -> std::io::Result<()> {
         0 => Ok(()),
         _ => Err(Error::from_raw_os_error(ret)),
     }
-
 }
 
 pub fn enable_autoconf(ifname: &str) -> std::io::Result<()> {
@@ -103,10 +99,7 @@ pub fn disable_autoconf(ifname: &str) -> std::io::Result<()> {
     send(&msg)
 }
 
-pub fn delete_addrs(
-    ifname: &str,
-) -> std::io::Result<()> {
-
+pub fn delete_addrs(ifname: &str) -> std::io::Result<()> {
     let mut msg = Msg::new(Cmd::DeleteAddrs);
     msg.ifname[..ifname.len()].copy_from_slice(ifname.as_bytes());
 
@@ -121,20 +114,19 @@ pub fn create_addrs(
     stateful: bool,
     aobjname: &str,
 ) -> std::io::Result<()> {
-
-    let stateful = if stateful { 
-        sys::boolean_t_B_TRUE 
-    } else { 
-        sys::boolean_t_B_FALSE 
+    let stateful = if stateful {
+        sys::boolean_t_B_TRUE
+    } else {
+        sys::boolean_t_B_FALSE
     };
 
-    let stateless = if stateless { 
-        sys::boolean_t_B_TRUE 
-    } else { 
-        sys::boolean_t_B_FALSE 
+    let stateless = if stateless {
+        sys::boolean_t_B_TRUE
+    } else {
+        sys::boolean_t_B_FALSE
     };
 
-    let mut msg = Msg{
+    let mut msg = Msg {
         cmd: Cmd::CreateAddrs,
         ifname: [0; sys::LIFNAMSIZ],
         aobjname: [0; sys::MAXNAMELEN as usize],
@@ -145,7 +137,6 @@ pub fn create_addrs(
     };
     msg.ifname[..ifname.len()].copy_from_slice(ifname.as_bytes());
     msg.aobjname[..aobjname.len()].copy_from_slice(aobjname.as_bytes());
-        
-    send(&msg)
 
+    send(&msg)
 }

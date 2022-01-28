@@ -1,6 +1,7 @@
 // Copyright 2021 Oxide Computer Company
 
 use crate::nvlist::{NvDataType, NvHeader, NvPair, Value, NVP};
+use libc::{free, malloc, sockaddr_in6};
 use rusty_doors::{door_call, door_callp};
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -8,16 +9,11 @@ use std::ffi::CStr;
 use std::fs::File;
 use std::mem::{align_of, size_of};
 use std::net::{Ipv4Addr, Ipv6Addr};
+use std::os::raw::c_char;
 use std::os::unix::io::AsRawFd;
 use std::ptr;
 use std::str::FromStr;
 use tracing::{debug, trace, warn};
-use libc::{
-    malloc,
-    free,
-    sockaddr_in6,
-};
-use std::os::raw::c_char;
 
 #[derive(Debug)]
 #[repr(i32)]
@@ -78,9 +74,7 @@ pub struct IpmgmtRval {
 
 impl Default for IpmgmtRval {
     fn default() -> Self {
-        IpmgmtRval {
-            err: 0,
-        }
+        IpmgmtRval { err: 0 }
     }
 }
 
@@ -128,7 +122,7 @@ pub struct IpmgmtAobjopArg {
     pub ifname: [c_char; LIFNAMSIZ as usize],
     pub lnum: i32,
     pub family: u16,
-    pub atype: AddrType
+    pub atype: AddrType,
 }
 
 #[repr(C)]
@@ -146,7 +140,7 @@ pub struct IpmgmtAobjopRval {
 
 impl Default for IpmgmtAobjopRval {
     fn default() -> Self {
-        IpmgmtAobjopRval{
+        IpmgmtAobjopRval {
             err: 0,
             objname: [0; IPADM_AOBJSIZ as usize],
             ifname: [0; LIFNAMSIZ as usize],
@@ -168,7 +162,7 @@ pub union IpmgmtAddrTypeCache {
 
 impl Default for IpmgmtAddrTypeCache {
     fn default() -> Self {
-        IpmgmtAddrTypeCache{
+        IpmgmtAddrTypeCache {
             ipv6_cache: IpmgmtIpv6Cache::default(),
         }
     }
@@ -182,7 +176,6 @@ pub enum BooleanT {
     True,
 }
 
-
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct IpmgmtIpv6Cache {
@@ -194,16 +187,14 @@ impl Default for IpmgmtIpv6Cache {
     fn default() -> Self {
         IpmgmtIpv6Cache {
             linklocal: BooleanT::False,
-            ifid: sockaddr_in6{
+            ifid: sockaddr_in6 {
                 sin6_family: 0,
                 sin6_port: 0,
                 sin6_flowinfo: 0,
-                sin6_addr: libc::in6_addr{
-                    s6_addr: [0; 16],
-                },
+                sin6_addr: libc::in6_addr { s6_addr: [0; 16] },
                 sin6_scope_id: 0,
                 __sin6_src_id: 0,
-            }
+            },
         }
     }
 }
@@ -216,7 +207,7 @@ pub struct IpmgmtDhcpCache {
 
 impl Default for IpmgmtDhcpCache {
     fn default() -> Self {
-        IpmgmtDhcpCache{ reqhost: [0; 256] }
+        IpmgmtDhcpCache { reqhost: [0; 256] }
     }
 }
 
@@ -274,8 +265,8 @@ pub struct Intfid {
     pub stateful: bool,
 }
 
-pub fn get_persistent_ipinfo() 
--> Result<HashMap<String, HashMap<String, IpInfo>>, String> {
+pub fn get_persistent_ipinfo(
+) -> Result<HashMap<String, HashMap<String, IpInfo>>, String> {
     unsafe {
         //// call the ipadmd door to get address information
 
@@ -284,9 +275,8 @@ pub fn get_persistent_ipinfo()
 
         // This memory may get realloc'd by the door call, so we cannot use a
         // Box :/
-        let mut response: *mut IpmgmtGetRval = malloc(std::mem::size_of::<
-            IpmgmtGetRval,
-        >()) as *mut IpmgmtGetRval;
+        let mut response: *mut IpmgmtGetRval =
+            malloc(std::mem::size_of::<IpmgmtGetRval>()) as *mut IpmgmtGetRval;
 
         let request = IpmgmtGetAddr {
             ..Default::default()
@@ -307,10 +297,12 @@ pub fn get_persistent_ipinfo()
 
         // NOTE! somehwere in the packing process an 8 byte padd is added
         // between the header and the first nvpair
-        let sk = ((nvh.offset(1) as *const NvHeader) as *const u8).offset(0) as *const u8;
+        let sk = ((nvh.offset(1) as *const NvHeader) as *const u8).offset(0)
+            as *const u8;
         let skipped = std::slice::from_raw_parts(sk, 8);
         warn!("skipping {:x?}", skipped);
-        let p = ((nvh.offset(1) as *const NvHeader) as *const u8).offset(8) as *const u8;
+        let p = ((nvh.offset(1) as *const NvHeader) as *const u8).offset(8)
+            as *const u8;
 
         // NOTE! i've observed that `nval_size` can be larger than the
         // actual size of the list. We are relying on zero-sized nvpair
@@ -333,8 +325,9 @@ pub fn get_persistent_ipinfo()
     }
 }
 
-fn handle_nvps(nvps: &Vec<NVP<'static>>) 
--> HashMap<String, HashMap<String, IpInfo>> {
+fn handle_nvps(
+    nvps: &Vec<NVP<'static>>,
+) -> HashMap<String, HashMap<String, IpInfo>> {
     let mut result = HashMap::new();
 
     for nvp in nvps.iter() {
@@ -358,7 +351,9 @@ fn handle_nvps(nvps: &Vec<NVP<'static>>)
                                 match ip_info.properties {
                                     IpProperties::Dhcp(dcpi) => {
                                         match dcpi.parameters {
-                                            Some(ps) => dcp.parameters = Some(ps),
+                                            Some(ps) => {
+                                                dcp.parameters = Some(ps)
+                                            }
                                             None => {}
                                         }
                                         match dcpi.reqhost {
@@ -453,10 +448,11 @@ fn handle_nvp(nvp: &NVP<'static>) -> Option<IpInfo> {
                             }
                         },
                         None => {
-                            ip_properties = Some(IpProperties::Dhcp(DhcpProperties {
-                                parameters: Some(dcp),
-                                reqhost: None,
-                            }));
+                            ip_properties =
+                                Some(IpProperties::Dhcp(DhcpProperties {
+                                    parameters: Some(dcp),
+                                    reqhost: None,
+                                }));
                         }
                     }
                 }
@@ -476,10 +472,11 @@ fn handle_nvp(nvp: &NVP<'static>) -> Option<IpInfo> {
                         }
                     },
                     None => {
-                        ip_properties = Some(IpProperties::Dhcp(DhcpProperties {
-                            parameters: None,
-                            reqhost: Some(s.to_string()),
-                        }));
+                        ip_properties =
+                            Some(IpProperties::Dhcp(DhcpProperties {
+                                parameters: None,
+                                reqhost: Some(s.to_string()),
+                            }));
                     }
                 },
                 _ => {}
@@ -507,9 +504,9 @@ fn handle_nvp(nvp: &NVP<'static>) -> Option<IpInfo> {
                                 Value::Uint8Array(u) => {
                                     intfid.addr = match u.try_into()
                                         as Result<
-                                            [u8; 16], 
-                                            <&[u8] as TryInto<[u8; 16]>>::Error>
-                                    {
+                                            [u8; 16],
+                                            <&[u8] as TryInto<[u8; 16]>>::Error,
+                                        > {
                                         Ok(addr) => Ipv6Addr::from(addr),
                                         Err(_) => continue,
                                     }
@@ -558,7 +555,8 @@ fn handle_nvp(nvp: &NVP<'static>) -> Option<IpInfo> {
                                 Ok(addr) => {
                                     ip_properties =
                                         Some(IpProperties::V4Static(
-                                                V4Static { addr: addr }));
+                                            V4Static { addr: addr },
+                                        ));
                                 }
                                 _ => {
                                     warn!("bad ipv4 address: {}", s)
@@ -581,7 +579,8 @@ fn handle_nvp(nvp: &NVP<'static>) -> Option<IpInfo> {
                                 Ok(addr) => {
                                     ip_properties =
                                         Some(IpProperties::V6Static(
-                                                V6Static { addr: addr }));
+                                            V6Static { addr: addr },
+                                        ));
                                 }
                                 _ => {
                                     warn!("bad ipv6 address: {}", s)
@@ -672,7 +671,8 @@ fn extract_nvp(nvp: *const NvPair) -> Result<NVP<'static>, String> {
         trace!("nvp: {:?}", *nvp);
         let p = ((nvp.offset(1) as *const NvPair) as *const u8) as *mut u8;
         let name = {
-            let slice = std::slice::from_raw_parts(p, (*nvp).name_size as usize);
+            let slice =
+                std::slice::from_raw_parts(p, (*nvp).name_size as usize);
             let cstr = std::ffi::CStr::from_bytes_with_nul_unchecked(slice);
             match cstr.to_str() {
                 Ok(s) => s,
@@ -691,8 +691,10 @@ fn extract_nvp(nvp: *const NvPair) -> Result<NVP<'static>, String> {
             NvDataType::Str => {
                 let slice = std::slice::from_raw_parts(
                     v,
-                    ((*nvp).size - (*nvp).name_size as i32 - size_of::<NvPair>() as i32 - 1)
-                        as usize,
+                    ((*nvp).size
+                        - (*nvp).name_size as i32
+                        - size_of::<NvPair>() as i32
+                        - 1) as usize,
                 );
                 let cstr = std::ffi::CStr::from_bytes_with_nul_unchecked(slice);
                 let decoded = match cstr.to_str() {
@@ -725,7 +727,8 @@ fn extract_nvp(nvp: *const NvPair) -> Result<NVP<'static>, String> {
             }
 
             NvDataType::Uint8Array => {
-                let ua = std::slice::from_raw_parts(v, (*nvp).value_count as usize);
+                let ua =
+                    std::slice::from_raw_parts(v, (*nvp).value_count as usize);
                 result.value = Value::Uint8Array(ua);
                 trace!("  value: {:x?}", ua);
             }
@@ -742,8 +745,10 @@ fn extract_nvp(nvp: *const NvPair) -> Result<NVP<'static>, String> {
 }
 
 //TODO this interface should return all information contained in addrobj_rtal_t
-pub fn ifname_to_addrobj(mut if_name: &str, addr_family: u16)
--> Result<(String, String), String> {
+pub fn ifname_to_addrobj(
+    mut if_name: &str,
+    addr_family: u16,
+) -> Result<(String, String), String> {
     let parts: Vec<&str> = if_name.split(':').collect();
     let num = match parts.len() {
         2 => match i32::from_str_radix(parts[1], 10) {
@@ -774,7 +779,8 @@ pub fn ifname_to_addrobj(mut if_name: &str, addr_family: u16)
     let f = File::open("/etc/svc/volatile/ipadm/ipmgmt_door")
         .map_err(|e| format!("door open: {}", e))?;
 
-    let resp: crate::sys::ipmgmt_aobjop_rval_t = door_call(f.as_raw_fd(), request);
+    let resp: crate::sys::ipmgmt_aobjop_rval_t =
+        door_call(f.as_raw_fd(), request);
 
     let objname = unsafe {
         CStr::from_ptr(resp.ir_aobjname.as_ptr())
@@ -796,10 +802,9 @@ pub fn ifname_to_addrobj(mut if_name: &str, addr_family: u16)
 
 //TODO this interface should return all information contained in addrobj_rtal_t
 //      in a sane way e.g. not a tuple
-pub fn addrobjname_to_addrobj(aobj_name: &str)
--> Result<(String, String, u16, String, i32), String> {
-
-
+pub fn addrobjname_to_addrobj(
+    aobj_name: &str,
+) -> Result<(String, String, u16, String, i32), String> {
     let mut request = crate::sys::ipmgmt_aobjop_arg_t {
         ia_cmd: crate::sys::ipmgmt_door_cmd_type_t_IPMGMT_CMD_AOBJNAME2ADDROBJ,
         ia_flags: 0,
@@ -816,7 +821,8 @@ pub fn addrobjname_to_addrobj(aobj_name: &str)
     let f = File::open("/etc/svc/volatile/ipadm/ipmgmt_door")
         .map_err(|e| format!("door open: {}", e))?;
 
-    let resp: crate::sys::ipmgmt_aobjop_rval_t = door_call(f.as_raw_fd(), request);
+    let resp: crate::sys::ipmgmt_aobjop_rval_t =
+        door_call(f.as_raw_fd(), request);
 
     let ifname = unsafe {
         CStr::from_ptr(resp.ir_ifname.as_ptr())
@@ -833,6 +839,11 @@ pub fn addrobjname_to_addrobj(aobj_name: &str)
         _ => "?",
     };
 
-    Ok((aobj_name.to_string(), source.to_string(), resp.ir_family, ifname, resp.ir_lnum))
-
+    Ok((
+        aobj_name.to_string(),
+        source.to_string(),
+        resp.ir_family,
+        ifname,
+        resp.ir_lnum,
+    ))
 }

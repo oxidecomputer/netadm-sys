@@ -3,7 +3,6 @@ use anyhow::Result;
 
 #[test]
 fn get_links() -> Result<()> {
-
     // just making sure it runs without error
     crate::get_links()?;
 
@@ -12,7 +11,6 @@ fn get_links() -> Result<()> {
 
 #[test]
 fn link_consistency() -> Result<()> {
-
     let links = crate::get_links()?;
 
     for link in links {

@@ -2,14 +2,12 @@
 
 use crate::sys;
 use crate::{Error, LinkClass, LinkFlags, LinkInfo};
+use libc::ENOENT;
 use rusty_doors::door_call;
 use std::fs::File;
 use std::os::unix::io::AsRawFd;
 use std::str;
 use tracing::{debug, warn};
-use libc::{
-    ENOENT,
-};
 
 const DATALINK_ANY_MEDIATYPE: u64 = 0x01 << 32;
 
@@ -41,7 +39,6 @@ pub enum DlmgmtCmd {
     ZoneBoot = 141,
     ZoneHalt = 142,
 }
-
 
 #[derive(Debug)]
 #[repr(C)]
@@ -296,7 +293,10 @@ struct DlmgmtDoorDestroyConf {
 
 //TODO this is coming back once i get around to persistent confi
 #[allow(dead_code)]
-pub(crate) fn connect_simnet_peers(link_id_a: u32, link_id_b: u32) -> Result<(), Error> {
+pub(crate) fn connect_simnet_peers(
+    link_id_a: u32,
+    link_id_b: u32,
+) -> Result<(), Error> {
     let peer_info = get_link(link_id_b)?;
 
     let key = "simnetpeer";
@@ -309,7 +309,8 @@ pub(crate) fn connect_simnet_peers(link_id_a: u32, link_id_b: u32) -> Result<(),
         linkid: link_id_a,
     };
 
-    let open_response: DlmgmtOpenConfRetval = door_call(f.as_raw_fd(), open_request);
+    let open_response: DlmgmtOpenConfRetval =
+        door_call(f.as_raw_fd(), open_request);
     if open_response.err != 0 {
         return Err(Error::Dlmgmtd(format!(
             "openconf failed: {}",
@@ -401,7 +402,10 @@ fn close_conf(fd: i32, conf_id: u32) -> Result<(), Error> {
     Ok(())
 }
 
-pub(crate) fn create_simnet_link(name: &String, flags: LinkFlags) -> Result<LinkInfo, Error> {
+pub(crate) fn create_simnet_link(
+    name: &String,
+    flags: LinkFlags,
+) -> Result<LinkInfo, Error> {
     let id = crate::link::create_link_id(name, LinkClass::Simnet, flags)?;
     let link_info = crate::ioctl::create_simnet(id, flags)?;
     if (flags as u32 & LinkFlags::Persistent as u32) != 0 {
@@ -412,7 +416,11 @@ pub(crate) fn create_simnet_link(name: &String, flags: LinkFlags) -> Result<Link
     Ok(link_info)
 }
 
-pub fn create_vnic_link(name: &String, link: u32, flags: LinkFlags) -> Result<LinkInfo, Error> {
+pub fn create_vnic_link(
+    name: &String,
+    link: u32,
+    flags: LinkFlags,
+) -> Result<LinkInfo, Error> {
     let id = crate::link::create_link_id(name, LinkClass::Vnic, flags)?;
     let link_info = crate::ioctl::create_vnic(id, link)?;
     if (flags as u32 & LinkFlags::Persistent as u32) != 0 {
@@ -506,7 +514,8 @@ pub struct DlmgmtDoorCreateId {
 }
 
 fn dlmgmt_door_fd() -> Result<File, Error> {
-    File::open("/etc/svc/volatile/dladm/dlmgmt_door").map_err(|e| Error::File(e))
+    File::open("/etc/svc/volatile/dladm/dlmgmt_door")
+        .map_err(|e| Error::File(e))
 }
 
 pub(crate) fn create_link_id(

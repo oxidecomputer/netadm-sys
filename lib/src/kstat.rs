@@ -37,8 +37,10 @@ pub fn get_linkstate(name: &str) -> Result<sys::link_state_t, Error> {
         }
 
         // lookup the link state data value
-        let knp = sys::kstat_data_lookup(ksp, stat.as_c_str().as_ptr() as *mut c_char)
-            as *mut sys::kstat_named_t;
+        let knp = sys::kstat_data_lookup(
+            ksp,
+            stat.as_c_str().as_ptr() as *mut c_char,
+        ) as *mut sys::kstat_named_t;
 
         if knp == ptr::null_mut() {
             sys::kstat_close(kcp);

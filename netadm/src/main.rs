@@ -4,21 +4,9 @@ use anyhow::{anyhow, Result};
 use clap::{AppSettings, Parser};
 use colored::*;
 use netadm_sys::{
-    self,
-    create_simnet_link,
-    create_vnic_link,
-    create_ipaddr,
-    add_route,
-    get_ipaddrs,
-    get_ipaddr_info,
-    get_link,
-    get_links,
-    ip,
-    route,
-    IpState,
-    LinkFlags,
-    LinkHandle,
-    IpPrefix,
+    self, add_route, create_ipaddr, create_simnet_link, create_vnic_link,
+    get_ipaddr_info, get_ipaddrs, get_link, get_links, ip, route, IpPrefix,
+    IpState, LinkFlags, LinkHandle,
 };
 use std::io::{stdout, Write};
 use std::net::IpAddr;
@@ -130,7 +118,7 @@ struct EnableV6Subcommand {
     #[clap(about = "available functions: link-local (or ll), or dhcp")]
     function: V6Function,
     #[clap(about = "interface name")]
-    interface: String
+    interface: String,
 }
 
 /// Enable IPv4 network functions.
@@ -140,7 +128,7 @@ struct EnableV4Subcommand {
     #[clap(about = "available functions: dhcp")]
     function: V4Function,
     #[clap(about = "interface name")]
-    interface: String
+    interface: String,
 }
 
 #[derive(Parser)]
@@ -274,56 +262,65 @@ fn main() {
             },
         },
         SubCommand::Create(ref c) => match c.subcmd {
-            CreateSubCommand::Simnet(ref sim) => match create_simnet(
-                &opts, &c, &sim) {
-                Ok(()) => {}
-                Err(e) => error!("{}", e),
-            },
-            CreateSubCommand::Vnic(ref vnic) => match create_vnic(
-                &opts, &c, &vnic) {
-                Ok(()) => {}
-                Err(e) => error!("{}", e),
-            },
-            CreateSubCommand::Addr(ref addr) => match create_addr(
-                &opts, &c, &addr) {
-                Ok(()) => {}
-                Err(e) => error!("{}", e),
-            },
-            CreateSubCommand::Route(ref route) => match create_route(
-                &opts, &c, &route) {
-                Ok(()) => {}
-                Err(e) => error!("{}", e),
-            },
+            CreateSubCommand::Simnet(ref sim) => {
+                match create_simnet(&opts, &c, &sim) {
+                    Ok(()) => {}
+                    Err(e) => error!("{}", e),
+                }
+            }
+            CreateSubCommand::Vnic(ref vnic) => {
+                match create_vnic(&opts, &c, &vnic) {
+                    Ok(()) => {}
+                    Err(e) => error!("{}", e),
+                }
+            }
+            CreateSubCommand::Addr(ref addr) => {
+                match create_addr(&opts, &c, &addr) {
+                    Ok(()) => {}
+                    Err(e) => error!("{}", e),
+                }
+            }
+            CreateSubCommand::Route(ref route) => {
+                match create_route(&opts, &c, &route) {
+                    Ok(()) => {}
+                    Err(e) => error!("{}", e),
+                }
+            }
         },
         SubCommand::Delete(ref d) => match d.subcmd {
-            DeleteSubCommand::Link(ref lnk) => match delete_link(
-                &opts, &d, &lnk) {
-                Ok(()) => {}
-                Err(e) => error!("{}", e),
-            },
-            DeleteSubCommand::Addr(ref addr) => match delete_addr(
-                &opts, &d, &addr) {
-                Ok(()) => {}
-                Err(e) => error!("{}", e),
-            },
-            DeleteSubCommand::Route(ref route) => match delete_route(
-                &opts, &d, &route) {
-                Ok(()) => {}
-                Err(e) => error!("{}", e),
-            },
+            DeleteSubCommand::Link(ref lnk) => {
+                match delete_link(&opts, &d, &lnk) {
+                    Ok(()) => {}
+                    Err(e) => error!("{}", e),
+                }
+            }
+            DeleteSubCommand::Addr(ref addr) => {
+                match delete_addr(&opts, &d, &addr) {
+                    Ok(()) => {}
+                    Err(e) => error!("{}", e),
+                }
+            }
+            DeleteSubCommand::Route(ref route) => {
+                match delete_route(&opts, &d, &route) {
+                    Ok(()) => {}
+                    Err(e) => error!("{}", e),
+                }
+            }
         },
         SubCommand::Enable(ref e) => match e.subcmd {
-            EnableSubCommand::V4(ref cmd) => match enable_v4_function(
-                &opts, &e, &cmd) {
-                Ok(()) => {}
-                Err(e) => error!("{}", e),
+            EnableSubCommand::V4(ref cmd) => {
+                match enable_v4_function(&opts, &e, &cmd) {
+                    Ok(()) => {}
+                    Err(e) => error!("{}", e),
+                }
             }
-            EnableSubCommand::V6(ref cmd) => match enable_v6_function(
-                &opts, &e, &cmd) {
-                Ok(()) => {}
-                Err(e) => error!("{}", e),
+            EnableSubCommand::V6(ref cmd) => {
+                match enable_v6_function(&opts, &e, &cmd) {
+                    Ok(()) => {}
+                    Err(e) => error!("{}", e),
+                }
             }
-        }
+        },
         SubCommand::Connect(ref c) => match connect_simnet_peers(&opts, &c) {
             Ok(()) => {}
             Err(e) => error!("{}", e),
@@ -373,15 +370,21 @@ fn delete_route(_opts: &Opts, _c: &Delete, c: &DeleteRoute) -> Result<()> {
     Ok(())
 }
 
-fn enable_v4_function(_opts: &Opts, _c: &Enable, _cmd: &EnableV4Subcommand)
-    -> Result<()> {
-        todo!();
+fn enable_v4_function(
+    _opts: &Opts,
+    _c: &Enable,
+    _cmd: &EnableV4Subcommand,
+) -> Result<()> {
+    todo!();
 }
 
-fn enable_v6_function(_opts: &Opts, _c: &Enable, cmd: &EnableV6Subcommand)
-    -> Result<()> {
-        netadm_sys::enable_v6_link_local(&cmd.interface)?;
-        Ok(())
+fn enable_v6_function(
+    _opts: &Opts,
+    _c: &Enable,
+    cmd: &EnableV6Subcommand,
+) -> Result<()> {
+    netadm_sys::enable_v6_link_local(&cmd.interface)?;
+    Ok(())
 }
 
 fn show_links(_opts: &Opts, _s: &Show, _l: &ShowLinks) -> Result<()> {
@@ -414,7 +417,12 @@ fn show_links(_opts: &Opts, _s: &Show, _l: &ShowLinks) -> Result<()> {
         if l.over != 0 {
             match get_link(l.over) {
                 Ok(info) => {
-                    name = format!("{}{}{}", name, "|".bright_black(), info.name.bright_black(),);
+                    name = format!(
+                        "{}{}{}",
+                        name,
+                        "|".bright_black(),
+                        info.name.bright_black(),
+                    );
                 }
                 _ => {}
             }
@@ -458,14 +466,12 @@ fn show_addrs(_opts: &Opts, _s: &Show, a: &ShowAddrs) -> Result<()> {
     )?;
 
     if a.name.is_some() {
-
         let name = a.name.as_ref().unwrap();
 
-        let addr = get_ipaddr_info(name)
-            .map_err(|e| anyhow!("{}", e))?;
+        let addr = get_ipaddr_info(name).map_err(|e| anyhow!("{}", e))?;
 
-        let (addrobj, src, _, _, _) = ip::addrobjname_to_addrobj(name)
-            .map_err(|e| anyhow!("{}", e))?;
+        let (addrobj, src, _, _, _) =
+            ip::addrobjname_to_addrobj(name).map_err(|e| anyhow!("{}", e))?;
         write!(
             &mut tw,
             "{}\t{}\t{}\t{}/{}\t{}\n",
@@ -478,8 +484,7 @@ fn show_addrs(_opts: &Opts, _s: &Show, a: &ShowAddrs) -> Result<()> {
         )?;
         tw.flush()?;
 
-        return Ok(())
-
+        return Ok(());
     }
 
     let addrs = get_ipaddrs()?;
@@ -487,8 +492,8 @@ fn show_addrs(_opts: &Opts, _s: &Show, a: &ShowAddrs) -> Result<()> {
     for (ifx, addrs) in addrs {
         for addr in &addrs {
             let (addrobj, src) =
-                ip::ifname_to_addrobj(
-                    ifx.as_str(), addr.family).map_err(|e| anyhow!("{}", e))?;
+                ip::ifname_to_addrobj(ifx.as_str(), addr.family)
+                    .map_err(|e| anyhow!("{}", e))?;
 
             //TODO gross get an enum
             if src == "none" {
@@ -554,11 +559,17 @@ fn color_ip(ip: IpAddr) -> String {
 
 fn color_state(state: &IpState) -> String {
     match state {
-        IpState::Disabled => format!("{}", "disabled".to_string().bright_black()),
+        IpState::Disabled => {
+            format!("{}", "disabled".to_string().bright_black())
+        }
         IpState::Duplicate => format!("{}", "duplicate".to_string().red()),
         IpState::Down => format!("{}", "down".to_string().bright_red()),
-        IpState::Tentative => format!("{}", "tentative".to_string().bright_yellow()),
+        IpState::Tentative => {
+            format!("{}", "tentative".to_string().bright_yellow())
+        }
         IpState::OK => format!("{}", "ok".to_string().bright_green()),
-        IpState::Inaccessible => format!("{}", "inaccessible".to_string().red()),
+        IpState::Inaccessible => {
+            format!("{}", "inaccessible".to_string().red())
+        }
     }
 }

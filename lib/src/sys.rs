@@ -10,21 +10,10 @@
 #![allow(deref_nullptr)]
 #![allow(unaligned_references)]
 
-use libc::{
-    sockaddr_storage,
-    sockaddr_in6,
-    in6_addr,
-};
+use libc::{in6_addr, sockaddr_in6, sockaddr_storage};
 
 use std::os::raw::{
-    c_int,
-    c_uint,
-    c_char,
-    c_ulong,
-    c_uchar,
-    c_ushort,
-    c_longlong,
-    c_ulonglong,
+    c_char, c_int, c_longlong, c_uchar, c_uint, c_ulong, c_ulonglong, c_ushort,
 };
 
 pub type id_t = c_int;
@@ -70,15 +59,15 @@ pub const IOC_OUT: u32 = 0x40000000;
 pub const IOC_IN: u32 = 0x80000000;
 pub const IOC_INOUT: u32 = IOC_OUT | IOC_IN;
 
-pub const STR: i32 = ('S' as i32)<<8;
-pub const I_PUSH: i32 =  STR | 0o2;
-pub const I_POP: i32 =  STR | 0o3;
-pub const I_PLINK: i32 =  STR | 0o26;
-pub const I_PUNLINK: i32 =  STR | 0o27;
-pub const I_STR: i32 =  STR | 0o10;
+pub const STR: i32 = ('S' as i32) << 8;
+pub const I_PUSH: i32 = STR | 0o2;
+pub const I_POP: i32 = STR | 0o3;
+pub const I_PLINK: i32 = STR | 0o26;
+pub const I_PUNLINK: i32 = STR | 0o27;
+pub const I_STR: i32 = STR | 0o10;
 
-pub const IP_MOD_NAME: &[u8;3] = b"ip\0";
-pub const ARP_MOD_NAME: &[u8;4] = b"arp\0";
+pub const IP_MOD_NAME: &[u8; 3] = b"ip\0";
+pub const ARP_MOD_NAME: &[u8; 4] = b"arp\0";
 
 pub type nvlist_t = nvlist;
 #[repr(C)]
@@ -105,28 +94,25 @@ macro_rules! DLDIOC {
 
 macro_rules! IOW {
     ($x:expr, $y:expr, $t:ty) => {
-        IOC_IN |
-        (std::mem::size_of::<$t>() as u32 & IOCPARM_MASK) << 16 |
-        ($x as u32) << 8 |
-        $y
+        IOC_IN
+            | (std::mem::size_of::<$t>() as u32 & IOCPARM_MASK) << 16
+            | ($x as u32) << 8
+            | $y
     };
 }
 
 macro_rules! IOWR {
     ($x:expr, $y:expr, $t:ty) => {
-        IOC_INOUT |
-        (std::mem::size_of::<$t>() as u32 & IOCPARM_MASK) << 16 |
-        ($x as u32) << 8 |
-        $y
+        IOC_INOUT
+            | (std::mem::size_of::<$t>() as u32 & IOCPARM_MASK) << 16
+            | ($x as u32) << 8
+            | $y
     };
 }
 
 macro_rules! IOWRN {
     ($x:expr, $y:expr, $t:expr) => {
-        IOC_INOUT |
-        ($t & IOCPARM_MASK) << 16 |
-        ($x as u32) << 8 |
-        $y
+        IOC_INOUT | ($t & IOCPARM_MASK) << 16 | ($x as u32) << 8 | $y
     };
 }
 
@@ -213,7 +199,6 @@ pub union lifconf_lifcu {
     pub lifcu_req: *mut lifreq,
 }
 
-
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct lif_ifinfo_req {
@@ -258,21 +243,21 @@ impl strioctl {
 
 pub const LIFNAMSIZ: usize = 32;
 
-pub const DLDIOC_MACADDRGET: i32 =  DLDIOC!(0x15);
-pub const SIOCLIFREMOVEIF: i32 =    IOW!('i',   110, lifreq) as i32;
-pub const SIOCLIFADDIF: i32 =       IOWR!('i',  111, lifreq) as i32;
-pub const SIOCSLIFADDR: i32 =       IOW!('i',   112, lifreq) as i32;
-pub const SIOCGLIFADDR: i32 =       IOWR!('i',  113, lifreq) as i32;
-pub const SIOCSLIFFLAGS: i32 =      IOW!('i',   116, lifreq) as i32;
-pub const SIOCGLIFFLAGS: i32 =      IOWR!('i',  117, lifreq) as i32;
-pub const SIOCGLIFNETMASK: i32 =    IOWR!('i',  125, lifreq) as i32;
-pub const SIOCSLIFNETMASK: i32 =    IOW!('i',   126, lifreq) as i32;
-pub const SIOCSLIFNAME: i32 =       IOWR!('i',  129, lifreq) as i32;
-pub const SIOCGLIFNUM: i32 =        IOWR!('i',  130, lifnum) as i32;
-pub const SIOCGLIFINDEX: i32 =      IOWR!('i',  133, lifreq) as i32;
-pub const SIOCGLIFCONF: i32 =       IOWRN!('i', 165, 16) as i32;
-pub const SIOCGLIFDADSTATE: i32 =   IOWR!('i',  190, lifreq) as i32;
-pub const SIOCSLIFPREFIX: i32 =     IOWR!('i',  191, lifreq) as i32;
+pub const DLDIOC_MACADDRGET: i32 = DLDIOC!(0x15);
+pub const SIOCLIFREMOVEIF: i32 = IOW!('i', 110, lifreq) as i32;
+pub const SIOCLIFADDIF: i32 = IOWR!('i', 111, lifreq) as i32;
+pub const SIOCSLIFADDR: i32 = IOW!('i', 112, lifreq) as i32;
+pub const SIOCGLIFADDR: i32 = IOWR!('i', 113, lifreq) as i32;
+pub const SIOCSLIFFLAGS: i32 = IOW!('i', 116, lifreq) as i32;
+pub const SIOCGLIFFLAGS: i32 = IOWR!('i', 117, lifreq) as i32;
+pub const SIOCGLIFNETMASK: i32 = IOWR!('i', 125, lifreq) as i32;
+pub const SIOCSLIFNETMASK: i32 = IOW!('i', 126, lifreq) as i32;
+pub const SIOCSLIFNAME: i32 = IOWR!('i', 129, lifreq) as i32;
+pub const SIOCGLIFNUM: i32 = IOWR!('i', 130, lifnum) as i32;
+pub const SIOCGLIFINDEX: i32 = IOWR!('i', 133, lifreq) as i32;
+pub const SIOCGLIFCONF: i32 = IOWRN!('i', 165, 16) as i32;
+pub const SIOCGLIFDADSTATE: i32 = IOWR!('i', 190, lifreq) as i32;
+pub const SIOCSLIFPREFIX: i32 = IOWR!('i', 191, lifreq) as i32;
 
 macro_rules! SIMNETIOC {
     ($cmdid:expr) => {
@@ -280,7 +265,7 @@ macro_rules! SIMNETIOC {
     };
 }
 pub const SIMNET_IOC_CREATE: i32 = SIMNETIOC!(1);
-pub const SIMNET_IOC_DELETE: i32 =	SIMNETIOC!(2);
+pub const SIMNET_IOC_DELETE: i32 = SIMNETIOC!(2);
 pub const SIMNET_IOC_INFO: i32 = SIMNETIOC!(3);
 pub const SIMNET_IOC_MODIFY: i32 = SIMNETIOC!(4);
 
@@ -320,14 +305,21 @@ pub const ipmgmt_door_cmd_type_t_IPMGMT_CMD_GETPROP: ipmgmt_door_cmd_type_t = 4;
 pub const ipmgmt_door_cmd_type_t_IPMGMT_CMD_GETIF: ipmgmt_door_cmd_type_t = 5;
 pub const ipmgmt_door_cmd_type_t_IPMGMT_CMD_GETADDR: ipmgmt_door_cmd_type_t = 6;
 pub const ipmgmt_door_cmd_type_t_IPMGMT_CMD_RESETIF: ipmgmt_door_cmd_type_t = 7;
-pub const ipmgmt_door_cmd_type_t_IPMGMT_CMD_RESETADDR: ipmgmt_door_cmd_type_t = 8;
-pub const ipmgmt_door_cmd_type_t_IPMGMT_CMD_RESETPROP: ipmgmt_door_cmd_type_t = 9;
+pub const ipmgmt_door_cmd_type_t_IPMGMT_CMD_RESETADDR: ipmgmt_door_cmd_type_t =
+    8;
+pub const ipmgmt_door_cmd_type_t_IPMGMT_CMD_RESETPROP: ipmgmt_door_cmd_type_t =
+    9;
 pub const ipmgmt_door_cmd_type_t_IPMGMT_CMD_INITIF: ipmgmt_door_cmd_type_t = 10;
-pub const ipmgmt_door_cmd_type_t_IPMGMT_CMD_ADDROBJ_LOOKUPADD: ipmgmt_door_cmd_type_t = 11;
-pub const ipmgmt_door_cmd_type_t_IPMGMT_CMD_ADDROBJ_SETLIFNUM: ipmgmt_door_cmd_type_t = 12;
-pub const ipmgmt_door_cmd_type_t_IPMGMT_CMD_ADDROBJ_ADD: ipmgmt_door_cmd_type_t = 13;
-pub const ipmgmt_door_cmd_type_t_IPMGMT_CMD_LIF2ADDROBJ: ipmgmt_door_cmd_type_t = 14;
-pub const ipmgmt_door_cmd_type_t_IPMGMT_CMD_AOBJNAME2ADDROBJ: ipmgmt_door_cmd_type_t = 15;
+pub const ipmgmt_door_cmd_type_t_IPMGMT_CMD_ADDROBJ_LOOKUPADD:
+    ipmgmt_door_cmd_type_t = 11;
+pub const ipmgmt_door_cmd_type_t_IPMGMT_CMD_ADDROBJ_SETLIFNUM:
+    ipmgmt_door_cmd_type_t = 12;
+pub const ipmgmt_door_cmd_type_t_IPMGMT_CMD_ADDROBJ_ADD:
+    ipmgmt_door_cmd_type_t = 13;
+pub const ipmgmt_door_cmd_type_t_IPMGMT_CMD_LIF2ADDROBJ:
+    ipmgmt_door_cmd_type_t = 14;
+pub const ipmgmt_door_cmd_type_t_IPMGMT_CMD_AOBJNAME2ADDROBJ:
+    ipmgmt_door_cmd_type_t = 15;
 pub type ipmgmt_door_cmd_type_t = ::std::os::raw::c_uint;
 
 #[repr(C)]
@@ -412,7 +404,6 @@ pub const ipadm_addr_type_t_IPADM_ADDR_IPV6_ADDRCONF: ipadm_addr_type_t = 2;
 pub const ipadm_addr_type_t_IPADM_ADDR_DHCP: ipadm_addr_type_t = 3;
 pub type ipadm_addr_type_t = ::std::os::raw::c_uint;
 
-
 pub type datalink_id_t = u32;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -438,66 +429,65 @@ pub type dld_macaddrinfo_t = dld_macaddrinfo;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct rt_metrics {
-    pub locks: u32,     /* Kernel must leave  these  values alone */
-    pub mtu: u32,       /* MTU for this path */
-    pub hopcount: u32,  /* max hops expected */
-    pub expire: u32,    /* lifetime for route, e.g., redirect */
-    pub recvpipe: u32,  /* inbound delay-bandwidth  product */
-    pub sendpipe: u32,  /* outbound delay-bandwidth product */
-    pub ssthresh: u32,  /* outbound gateway buffer limit */
-    pub rtt: u32,       /* estimated round trip time */
-    pub rttvar: u32,    /* estimated rtt variance */
-    pub pksent: u32,    /* packets sent using this route */
+    pub locks: u32,    /* Kernel must leave  these  values alone */
+    pub mtu: u32,      /* MTU for this path */
+    pub hopcount: u32, /* max hops expected */
+    pub expire: u32,   /* lifetime for route, e.g., redirect */
+    pub recvpipe: u32, /* inbound delay-bandwidth  product */
+    pub sendpipe: u32, /* outbound delay-bandwidth product */
+    pub ssthresh: u32, /* outbound gateway buffer limit */
+    pub rtt: u32,      /* estimated round trip time */
+    pub rttvar: u32,   /* estimated rtt variance */
+    pub pksent: u32,   /* packets sent using this route */
 }
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct rt_msghdr {
-    pub msglen: ushort_t,   /* to skip over non-understood messages */
-    pub version: uchar_t,   /* future binary compatibility */
-    pub typ: uchar_t,       /* message type */
-    pub index: ushort_t,    /* index for associated ifp */
-    pub flags: c_int,       /* flags,  incl  kern  &  message, e.g., DONE */
-    pub addrs: c_int,       /* bitmask identifying sockaddrs in msg */
-    pub pid: pid_t,         /* identify sender */
-    pub seq: c_int,         /* for sender to identify action */
-    pub errno: c_int,       /* why failed */
-    pub used: c_int,        /* from rtentry */
-    pub inits: uint_t,      /* which values we are initializing */
-    pub rmx: rt_metrics,    /* metrics themselves */
+    pub msglen: ushort_t, /* to skip over non-understood messages */
+    pub version: uchar_t, /* future binary compatibility */
+    pub typ: uchar_t,     /* message type */
+    pub index: ushort_t,  /* index for associated ifp */
+    pub flags: c_int,     /* flags,  incl  kern  &  message, e.g., DONE */
+    pub addrs: c_int,     /* bitmask identifying sockaddrs in msg */
+    pub pid: pid_t,       /* identify sender */
+    pub seq: c_int,       /* for sender to identify action */
+    pub errno: c_int,     /* why failed */
+    pub used: c_int,      /* from rtentry */
+    pub inits: uint_t,    /* which values we are initializing */
+    pub rmx: rt_metrics,  /* metrics themselves */
 }
 
 impl Default for rt_msghdr {
-
-        fn default() -> Self {
-            unsafe {
-                rt_msghdr {
-                    msglen: std::mem::size_of::<rt_msghdr>() as u16,
-                    version: RTM_VERSION as u8,
-                    typ: RTM_GETALL as u8,
-                    addrs: 0,
-                    pid: getpid(),
-                    seq: 1701,
-                    errno: 0,
-                    flags: 0,
-                    used: 0,
-                    inits: 0,
-                    index: 0,
-                    rmx: rt_metrics {
-                        locks: 0,
-                        mtu: 0,
-                        hopcount: 0,
-                        expire: 0,
-                        recvpipe: 0,
-                        sendpipe: 0,
-                        ssthresh: 0,
-                        rtt: 0,
-                        rttvar: 0,
-                        pksent: 0,
-                    },
-                }
+    fn default() -> Self {
+        unsafe {
+            rt_msghdr {
+                msglen: std::mem::size_of::<rt_msghdr>() as u16,
+                version: RTM_VERSION as u8,
+                typ: RTM_GETALL as u8,
+                addrs: 0,
+                pid: getpid(),
+                seq: 1701,
+                errno: 0,
+                flags: 0,
+                used: 0,
+                inits: 0,
+                index: 0,
+                rmx: rt_metrics {
+                    locks: 0,
+                    mtu: 0,
+                    hopcount: 0,
+                    expire: 0,
+                    recvpipe: 0,
+                    sendpipe: 0,
+                    ssthresh: 0,
+                    rtt: 0,
+                    rttvar: 0,
+                    pksent: 0,
+                },
             }
         }
+    }
 }
 
 impl Default for ipmgmt_aobjop_rval_t {
@@ -517,9 +507,7 @@ impl Default for ipmgmt_aobjop_rval_t {
                         sin6_family: 0,
                         sin6_port: 0,
                         sin6_flowinfo: 0,
-                        sin6_addr: in6_addr {
-                            s6_addr: [0;16],
-                        },
+                        sin6_addr: in6_addr { s6_addr: [0; 16] },
                         sin6_scope_id: 0,
                         __sin6_src_id: 0,
                     },
@@ -581,14 +569,13 @@ pub const IPMGMT_PERSIST: u32 = 0x00000002;
 pub const IPMGMT_INIT: u32 = 0x00000004;
 pub const IPMGMT_PROPS_ONLY: u32 = 0x00000008;
 
-
 extern "C" {
     pub static mut errno: ::std::os::raw::c_int;
     pub fn strerror(errnum: i32) -> *mut std::os::raw::c_char;
 }
 
 pub fn errno_string() -> String {
-    let s = unsafe{ std::ffi::CStr::from_ptr(strerror(errno)) };
+    let s = unsafe { std::ffi::CStr::from_ptr(strerror(errno)) };
     match s.to_str() {
         Err(_) => "".to_string(),
         Ok(s) => s.to_string(),
@@ -596,7 +583,7 @@ pub fn errno_string() -> String {
 }
 
 pub fn err_string(err: i32) -> String {
-    let s = unsafe{ std::ffi::CStr::from_ptr(strerror(err)) };
+    let s = unsafe { std::ffi::CStr::from_ptr(strerror(err)) };
     match s.to_str() {
         Err(_) => "".to_string(),
         Ok(s) => s.to_string(),
@@ -986,28 +973,27 @@ pub const RTA_AUTHOR: u32 = 0x40;
 pub const RTA_BRD: u32 = 0x80;
 pub const RTA_SRC: u32 = 0x100;
 
-pub const RTF_UP: u32 = 0x1;           /* route usable */
-pub const RTF_GATEWAY: u32 = 0x2;      /* destination is a gateway */
-pub const RTF_HOST: u32 = 0x4;         /* host entry (net otherwise) */
-pub const RTF_REJECT: u32 = 0x8;       /* host or net unreachable */
-pub const RTF_DYNAMIC: u32 = 0x10;     /* created dynamically (by redirect) */
-pub const RTF_MODIFIED: u32 = 0x20;    /* modified dynamically (by redirect) */
-pub const RTF_DONE: u32 = 0x40;        /* message confirmed */
-pub const RTF_MASK: u32 = 0x80;        /* subnet mask present */
-pub const RTF_CLONING: u32 = 0x100;    /* generate new routes on use */
-pub const RTF_XRESOLVE: u32 = 0x200;   /* external daemon resolves name */
-pub const RTF_LLINFO: u32 = 0x400;     /* generated by ARP or ESIS */
-pub const RTF_STATIC: u32 = 0x800;     /* manually added */
+pub const RTF_UP: u32 = 0x1; /* route usable */
+pub const RTF_GATEWAY: u32 = 0x2; /* destination is a gateway */
+pub const RTF_HOST: u32 = 0x4; /* host entry (net otherwise) */
+pub const RTF_REJECT: u32 = 0x8; /* host or net unreachable */
+pub const RTF_DYNAMIC: u32 = 0x10; /* created dynamically (by redirect) */
+pub const RTF_MODIFIED: u32 = 0x20; /* modified dynamically (by redirect) */
+pub const RTF_DONE: u32 = 0x40; /* message confirmed */
+pub const RTF_MASK: u32 = 0x80; /* subnet mask present */
+pub const RTF_CLONING: u32 = 0x100; /* generate new routes on use */
+pub const RTF_XRESOLVE: u32 = 0x200; /* external daemon resolves name */
+pub const RTF_LLINFO: u32 = 0x400; /* generated by ARP or ESIS */
+pub const RTF_STATIC: u32 = 0x800; /* manually added */
 pub const RTF_BLACKHOLE: u32 = 0x1000; /* just discard pkts (during updates) */
-pub const RTF_PRIVATE: u32 = 0x2000;   /* do not advertise this route */
-pub const RTF_PROTO2: u32 = 0x4000;    /* protocol specific routing flag */
-pub const RTF_PROTO1: u32 = 0x8000;    /* protocol specific routing flag */
-pub const RTF_MULTIRT: u32 = 0x10000;  /* multiroute */
-pub const RTF_SETSRC: u32 = 0x20000;   /* set default outgoing src address */
+pub const RTF_PRIVATE: u32 = 0x2000; /* do not advertise this route */
+pub const RTF_PROTO2: u32 = 0x4000; /* protocol specific routing flag */
+pub const RTF_PROTO1: u32 = 0x8000; /* protocol specific routing flag */
+pub const RTF_MULTIRT: u32 = 0x10000; /* multiroute */
+pub const RTF_SETSRC: u32 = 0x20000; /* set default outgoing src address */
 pub const RTF_INDIRECT: u32 = 0x40000; /* gateway not directly reachable */
-pub const RTF_KERNEL: u32 = 0x80000;   /* created by kernel; can't delete */
-pub const RTF_ZONE: u32 = 0x100000;    /* (NGZ only) route from global zone */
-
+pub const RTF_KERNEL: u32 = 0x80000; /* created by kernel; can't delete */
+pub const RTF_ZONE: u32 = 0x100000; /* (NGZ only) route from global zone */
 
 extern "C" {
     pub fn getpid() -> pid_t;
@@ -1016,44 +1002,43 @@ extern "C" {
 /* error codes */
 #[repr(C)]
 pub enum IpadmStatusT {
-        Success,            /* No error occurred */
-        Failure,            /* Generic failure */
-        Eauth,              /* Insufficient user authorizations */
-        Eperm,              /* Permission denied */
-        NoBufs,             /* No Buffer space available */
-        NoMemory,           /* Insufficient memory */
-        BadAddr,            /* Invalid address */
-        BadProtocol,        /* Wrong protocol family for operation */
-        DadFound,           /* Duplicate address detected */
-        Exists,             /* Already exists */
-        IfExists,           /* Interface already exists */
-        AddrobjExists,      /* Address object already exists */
-        AddrconfExists,     /* Addrconf already in progress */
-        Enxio,              /* Interface does not exist */
-        GrpNotEmpty,        /* IPMP Group non-empty on unplumb */
-        InvalidArg,         /* Invalid argument */
-        InvalidName,        /* Invalid name */
-        DlpiFailure,        /* Could not open DLPI link */
-        DladmFailure,       /* DLADM error encountered */
-        PropUnknown,        /* Unknown property */
-        Erange,             /* Value is outside the allowed range */
-        Esrch,              /* Value does not exist */
-        Eoverflow,          /* Number of values exceed the allowed limit*/
-        NotFound,           /* Object not found */
-        IfInuse,            /* Interface already in use */
-        AddrInuse,          /* Address alrelady in use */
-        BadHostname,        /* hostname maps to multiple IP addresses */
-        AddrNotavail,       /* Can't assign requested address */
-        AllAddrsNotEnabled, /* All addresses could not be enabled */
-        NdpdNotRunning,     /* in.ndpd not running */
-        DhcpStartError,     /* Cannot start dhcpagent */
-        DhcpIpcError,       /* Cannot communicate with dhcpagent */
-        DhcpIpcTimeout,     /* Communication with dhcpagent timed out */
-        TemporaryObj,       /* Permanent operation on temporary object */
-        IpcError,           /* Cannot communicate with ipmgmtd */
-        OpDisableObj,       /* Operation on disable object */
-        NotSup,             /* Operation not supported */
-        Ebade,              /* Invalid data exchange with ipmgmtd */
-        GzPerm              /* Operation not permitted on from-gz intf */
+    Success,            /* No error occurred */
+    Failure,            /* Generic failure */
+    Eauth,              /* Insufficient user authorizations */
+    Eperm,              /* Permission denied */
+    NoBufs,             /* No Buffer space available */
+    NoMemory,           /* Insufficient memory */
+    BadAddr,            /* Invalid address */
+    BadProtocol,        /* Wrong protocol family for operation */
+    DadFound,           /* Duplicate address detected */
+    Exists,             /* Already exists */
+    IfExists,           /* Interface already exists */
+    AddrobjExists,      /* Address object already exists */
+    AddrconfExists,     /* Addrconf already in progress */
+    Enxio,              /* Interface does not exist */
+    GrpNotEmpty,        /* IPMP Group non-empty on unplumb */
+    InvalidArg,         /* Invalid argument */
+    InvalidName,        /* Invalid name */
+    DlpiFailure,        /* Could not open DLPI link */
+    DladmFailure,       /* DLADM error encountered */
+    PropUnknown,        /* Unknown property */
+    Erange,             /* Value is outside the allowed range */
+    Esrch,              /* Value does not exist */
+    Eoverflow,          /* Number of values exceed the allowed limit*/
+    NotFound,           /* Object not found */
+    IfInuse,            /* Interface already in use */
+    AddrInuse,          /* Address alrelady in use */
+    BadHostname,        /* hostname maps to multiple IP addresses */
+    AddrNotavail,       /* Can't assign requested address */
+    AllAddrsNotEnabled, /* All addresses could not be enabled */
+    NdpdNotRunning,     /* in.ndpd not running */
+    DhcpStartError,     /* Cannot start dhcpagent */
+    DhcpIpcError,       /* Cannot communicate with dhcpagent */
+    DhcpIpcTimeout,     /* Communication with dhcpagent timed out */
+    TemporaryObj,       /* Permanent operation on temporary object */
+    IpcError,           /* Cannot communicate with ipmgmtd */
+    OpDisableObj,       /* Operation on disable object */
+    NotSup,             /* Operation not supported */
+    Ebade,              /* Invalid data exchange with ipmgmtd */
+    GzPerm,             /* Operation not permitted on from-gz intf */
 }
-
