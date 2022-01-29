@@ -428,7 +428,8 @@ pub(crate) fn get_ipaddrs() -> Result<BTreeMap<String, Vec<IpInfo>>, Error> {
 
         for x in ifs.iter() {
             let info = match ipaddr_info(x, s4, s6) {
-                Ok(info) => info,
+                Ok(None) => continue,
+                Ok(Some(info)) => info,
                 Err(e) => {
                     warn!("{:?}", e);
                     continue;
@@ -908,6 +909,7 @@ fn parse_ifspec(ifname: &str) -> IfSpec {
     }
 }
 
+/// Get information about a specific IP interface
 pub fn get_ipaddr_info(name: &str) -> Result<IpInfo, Error> {
     unsafe {
         let (_, _, af, ifname, _) = crate::ip::addrobjname_to_addrobj(name)
@@ -923,21 +925,26 @@ pub fn get_ipaddr_info(name: &str) -> Result<IpInfo, Error> {
             return Err(Error::Ioctl("socket 6".to_string()));
         }
 
-        let ss = match af as i32 {
-            libc::AF_INET => s4,
-            libc::AF_INET6 => s6,
-            _ => {
-                return Err(Error::Ioctl(format!(
-                    "unknown address family: {}",
-                    af
-                )))
-            }
-        };
-
         let mut req = sys::lifreq::new();
         for (i, c) in ifname.chars().enumerate() {
             req.lifr_name[i] = c as c_char;
         }
+
+        let ss = match af as i32 {
+            libc::AF_INET => {
+                s4
+            }
+            libc::AF_INET6 => {
+                let sin6 = &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage
+                    as *mut sockaddr_in6;
+                (*sin6).sin6_family = AF_INET6 as u16;
+                s6
+            }
+            _ => {
+                return Err(Error::NotFound(name.into()))
+            }
+        };
+
 
         // get addr
         let ret = ioctl(ss, sys::SIOCGLIFADDR, &req);
@@ -947,7 +954,11 @@ pub fn get_ipaddr_info(name: &str) -> Result<IpInfo, Error> {
             return Err(Error::Ioctl("ioctl SIOCGLIFADDr".to_string()));
         }
 
-        ipaddr_info(&req, s4, s6)
+        match ipaddr_info(&req, s4, s6) {
+            Ok(Some(info)) => Ok(info),
+            Ok(None) => Err(Error::NotFound(name.into())),
+            Err(e) => Err(e),
+        }
     }
 }
 
@@ -955,7 +966,7 @@ unsafe fn ipaddr_info(
     x: &sys::lifreq,
     s4: i32,
     s6: i32,
-) -> Result<IpInfo, Error> {
+) -> Result<Option<IpInfo>, Error> {
     let _name = CStr::from_ptr(x.lifr_name.as_ptr());
     let name = match _name.to_str() {
         Ok(s) => s,
@@ -970,9 +981,9 @@ unsafe fn ipaddr_info(
     let addr = match sockaddr2ipaddr(&sa) {
         Some(addr) => addr,
         None => {
-            return Err(Error::Ioctl(
-                "socaddr to ipaddr conversion".to_string(),
-            ))
+            // this typically means that an interface is plumbed but the ip
+            // address has been removed, which is ok.
+            return Ok(None)
         }
     };
 
@@ -1041,14 +1052,14 @@ unsafe fn ipaddr_info(
         }
     };
 
-    Ok(IpInfo {
+    Ok(Some(IpInfo {
         addr,
         state,
         ifname: name.to_string(),
         index: idx,
         mask: ip_mask(mask),
         family: sa.ss_family,
-    })
+    }))
 }
 
 pub(crate) fn enable_v6_link_local(ifname: &str) -> Result<(), Error> {

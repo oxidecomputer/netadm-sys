@@ -3,6 +3,7 @@ use anyhow::Result;
 use libnet::{
     connect_simnet_peers, create_simnet_link, create_vnic_link, delete_link,
     get_link, get_links, Error, LinkFlags, LinkHandle, LinkInfo,
+    DropLink, DropIp,
 };
 
 /// The tests in this file test layer-2 functionality in libnet.
@@ -12,35 +13,13 @@ use libnet::{
 /// Conventions:
 ///
 ///   - When a link is created for testing purposes it is prefixed with
-///     "lnt_<prefix>" where prefix is unique to the test that is running. This
-///     is so test can be run concurrently with out name collisions.
+///     "lnt_<token>" where token is unique to the test that is running. This
+///     is so tests can be run concurrently with out name collisions. And so we
+///     avoid race conditions between tests in certain situations.
 ///
 ///   - All links should be created using the DropLink type. This is to ensure
 ///     tests that fail do not leave test links behind on the system.
 
-struct DropLink {
-    info: LinkInfo,
-}
-impl DropLink {
-    fn handle(&self) -> LinkHandle {
-        self.info.handle()
-    }
-    fn update(&mut self) -> Result<(), Error> {
-        self.info.update()
-    }
-}
-impl Drop for DropLink {
-    fn drop(&mut self) {
-        if let Err(e) = delete_link(&self.info.handle(), self.info.flags) {
-            println!("deleting {} failed: {}", self.info.name, e);
-        }
-    }
-}
-impl From<LinkInfo> for DropLink {
-    fn from(info: LinkInfo) -> Self {
-        Self { info }
-    }
-}
 
 // Basic Tests ================================================================
 

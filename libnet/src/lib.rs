@@ -267,7 +267,7 @@ pub fn connect_simnet_peers(
 // IP address management ------------------------------------------------------
 
 /// The state of an IP address in the kernel.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 #[repr(i32)]
 pub enum IpState {
     Disabled = 0,
@@ -279,7 +279,7 @@ pub enum IpState {
 }
 
 /// Information in the kernel about an IP address.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct IpInfo {
     pub ifname: String,
     pub index: i32,
@@ -289,7 +289,24 @@ pub struct IpInfo {
     pub state: IpState,
 }
 
-/// Get a list of all IP addresses on the system.
+impl IpInfo {
+    /// Get the address object associated with this IP address.
+    ///
+    /// The return value is a tuple of the form (name, kind). Name is an illumos
+    /// address object name of the form <link-name>/<address-name> and kind is
+    /// the kind of address such as static, dhcp, etc.
+    pub fn obj(&self) -> Result<(String, String), Error> {
+        match crate::ip::ifname_to_addrobj(&self.ifname, self.family) {
+            Ok((name, kind)) => Ok((name, kind)),
+            Err(e) => Err(Error::Ipmgmtd(e.to_string()))
+        }
+    }
+}
+
+/// Get a list of all IP addresses on the system. 
+///
+/// The return value is a map whose keys are data link names, and values are the
+/// addresses associated with those links.
 pub fn get_ipaddrs() -> Result<BTreeMap<String, Vec<IpInfo>>, Error> {
     crate::ioctl::get_ipaddrs()
     // TODO incorporate more persistent address information from here
@@ -376,6 +393,14 @@ impl FromStr for IpPrefix {
     }
 }
 
+impl From<Ipv6Prefix> for IpPrefix {
+    fn from(prefix: Ipv6Prefix) -> Self { IpPrefix::V6(prefix) }
+}
+
+impl From<Ipv4Prefix> for IpPrefix {
+    fn from(prefix: Ipv4Prefix) -> Self { IpPrefix::V4(prefix) }
+}
+
 /// An IPv6 address with a mask to indicate how many leading bits are
 /// significant.
 #[derive(Debug, Clone, Copy)]
@@ -434,5 +459,69 @@ impl FromStr for Ipv4Prefix {
             addr: Ipv4Addr::from_str(parts[0])?,
             mask: u8::from_str(parts[1])?,
         })
+    }
+}
+
+/// A wrapper for LinkInfo that deletes the associated link when dropped. Mostly
+/// for testing purposes< carefully.
+pub struct DropLink {
+    pub info: LinkInfo,
+}
+impl DropLink {
+    pub fn handle(&self) -> LinkHandle {
+        self.info.handle()
+    }
+    pub fn update(&mut self) -> Result<(), Error> {
+        self.info.update()
+    }
+}
+impl Drop for DropLink {
+    fn drop(&mut self) {
+        if let Err(e) = delete_link(&self.info.handle(), self.info.flags) {
+            println!("deleting {} failed: {}", self.info.name, e);
+        }
+    }
+}
+impl From<LinkInfo> for DropLink {
+    fn from(info: LinkInfo) -> Self {
+        Self { info }
+    }
+}
+
+/// A wrapper for IpInfo that deletes the associated address when dropped. Mostly
+/// for testing purposes< carefully.
+pub struct DropIp {
+    pub info: IpInfo
+}
+impl Drop for DropIp {
+    fn drop(&mut self) {
+        let name = match self.info.obj() {
+            Ok((name, _)) => name,
+            Err(e) => {
+                println!("delete {:?}: obj() failed: {}", self.info, e);
+                return;
+            }
+        };
+        if let Err(e) = delete_ipaddr(name) {
+            println!("delete {:?} failed: {}", self.info, e);
+        }
+    }
+}
+impl From<IpInfo> for DropIp {
+    fn from(info: IpInfo) -> Self {
+        Self { info }
+    }
+}
+
+/// A wrapper for a link name that deletes the associated IPv6 link localaddress
+/// when dropped. Mostly for testing purposes< carefully.
+pub struct DropLinkLocal {
+    pub name: String
+}
+impl Drop for DropLinkLocal {
+    fn drop(&mut self) {
+        if let Err(e) = delete_ipaddr(&self.name) {
+            println!("delete link-local {:?} failed: {}", self.name, e);
+        }
     }
 }
