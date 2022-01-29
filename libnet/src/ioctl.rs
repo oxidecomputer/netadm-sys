@@ -1,6 +1,6 @@
 // Copyright 2021 Oxide Computer Company
 
-use crate::ip;
+use crate::ip::{self, addrobjname_to_addrobj};
 use crate::sys::{
     self, dld_ioc_macaddrget_t, dld_macaddrinfo_t, DLDIOC_MACADDRGET,
     SIMNET_IOC_INFO, SIMNET_IOC_MODIFY,
@@ -534,10 +534,6 @@ pub(crate) fn delete_ipaddr(objname: impl AsRef<str>) -> Result<(), Error> {
         }
     }
 
-    let kname =
-        unsafe { std::ffi::CStr::from_ptr(&ior.lifr_name[0]).to_str()? };
-    println!("deleting {}", kname);
-
     let sock = match resp.family as i32 {
         libc::AF_INET => {
             let s4 = unsafe { socket(AF_INET as i32, SOCK_DGRAM as i32, 0) };
@@ -689,8 +685,6 @@ fn is_plumbed_for_af(name: &str, sock: i32) -> bool {
 fn plumb_for_af(name: &str, ifflags: u64) -> Result<(), Error> {
     // TODO not handling interfaces assigned to different zones correctly.
     // TODO not handling loopback as special case like libipadm does
-
-    println!("opening {}", name);
 
     let ip_h = match dlpi::open(name, dlpi::sys::DLPI_NOATTACH) {
         Ok(h) => h,
@@ -912,7 +906,7 @@ fn parse_ifspec(ifname: &str) -> IfSpec {
 /// Get information about a specific IP interface
 pub fn get_ipaddr_info(name: &str) -> Result<IpInfo, Error> {
     unsafe {
-        let (_, _, af, ifname, _) = crate::ip::addrobjname_to_addrobj(name)
+        let (_, _, af, mut ifname, lifnum) = addrobjname_to_addrobj(name)
             .map_err(|e| Error::Ioctl(format!("get addrobj: {}", e)))?;
 
         let s4 = socket(AF_INET as i32, SOCK_DGRAM as i32, 0);
@@ -923,6 +917,10 @@ pub fn get_ipaddr_info(name: &str) -> Result<IpInfo, Error> {
         if s6 < 0 {
             close(s4);
             return Err(Error::Ioctl("socket 6".to_string()));
+        }
+
+        if lifnum > 0 {
+            ifname = format!("{}:{}", ifname, lifnum);
         }
 
         let mut req = sys::lifreq::new();
@@ -1066,16 +1064,13 @@ pub(crate) fn enable_v6_link_local(ifname: &str) -> Result<(), Error> {
         return Err(Error::Ioctl("socket 6".to_string()));
     }
 
-    println!("checking plumbing");
     match is_plumbed_for_af(ifname, sock) {
         true => {}
         false => {
-            println!("plumbing");
             plumb_for_af(ifname, sys::IFF_IPV6.into())?;
         }
     };
 
-    println!("creating");
     create_ip_addr_linklocal(sock, ifname, &objname)
 }
 
@@ -1127,7 +1122,6 @@ pub fn create_ip_addr_linklocal(
         let f = File::open("/etc/svc/volatile/ipadm/ipmgmt_door")?;
 
         // add placeholder to ipmgmtd
-        println!("adding to ipmgmtd");
         add_if_to_ipmgmtd(
             objname,
             ifname,
@@ -1169,7 +1163,6 @@ pub fn create_ip_addr_linklocal(
             Error::Ioctl(format!("ndp create addrs: {}", e.to_string()))
         })?;
 
-        println!("persisting to ipmgmtd");
         ipmgmtd_persist(objname, ifname, lifnum, None, &f)?;
     }
 
@@ -1193,7 +1186,6 @@ fn create_logical_interface(
         // if addr is not unspecified, this logical interface is taken, create
         // a new one.
         if (*sin6).sin6_addr.s6_addr != [0u8; 16] {
-            println!("found: {:?}", (*sin6).sin6_addr.s6_addr);
             let ret = ioctl(sock, sys::SIOCLIFADDIF, req);
             if ret < 0 {
                 return Err(Error::Ioctl(format!(
@@ -1217,8 +1209,6 @@ fn parse_ifname(req: &sys::lifreq) -> Result<(&str, i32), Error> {
         2 => parts[1].parse::<i32>().unwrap_or(0),
         _ => 0,
     };
-
-    println!("parsed {} = {}:{}", ifname, ifname, lifnum);
 
     Ok((ifname, lifnum))
 }
