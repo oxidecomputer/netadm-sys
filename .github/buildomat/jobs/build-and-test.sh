@@ -25,4 +25,4 @@ cargo fmt -- --check
 cargo clippy
 
 banner test
-ptime -m cargo test
+pfexec ptime -m cargo test

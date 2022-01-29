@@ -156,5 +156,5 @@ cargo clippy
 ### Testing
 
 ```
-cargo test
+pfexec cargo test
 ```
