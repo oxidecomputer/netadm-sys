@@ -1,6 +1,6 @@
 # A Network Administration Crate for Illumos
 
-- [Documentation](https://oxidecomputer.github.io/netadm-sys/netadm_sys/index.html)
+- [Documentation](https://oxidecomputer.github.io/netadm-sys/libnet/index.html)
 
 While the end goal of this crate is to become a stable API for all things
 networking on illumos, right now it is the opposite of that. It's as much of an
@@ -16,13 +16,14 @@ described below.
 
 ## Where things are at today
 
-Currently, the primary entry points to programmatic access and control of network
-configuration and state are `libdladm` and `libipadm`. However, these are both
-private libraries, are are more extensions of the programs `dladm` and `ipadm`
-than they are libraries. Moreover, their interfaces are considered private, do
-not provide stability guarantees and are not meant for general consumption. This
-is not a great place to be. Programs running on illumos that need to observe and
-control network state and configuration have no good option.
+Currently on illumos, the primary entry points to programmatic access and
+control of network configuration and state are `libdladm` and `libipadm`.
+However, these are both private libraries, and are more extensions of the
+programs `dladm` and `ipadm` than they are libraries. Moreover, their interfaces
+are considered private, do not provide stability guarantees and are not meant
+for general consumption. This is not a great place to be. Programs running on
+illumos that need to observe and control network state and configuration have no
+good option.
 
 ```
            L3:

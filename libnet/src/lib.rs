@@ -158,6 +158,18 @@ pub struct LinkInfo {
     pub over: u32,
 }
 
+impl LinkInfo {
+    /// Get a [`LinkHandle`] for the link this object refers to.
+    pub fn handle(&self) -> LinkHandle {
+        LinkHandle::Id(self.id)
+    }
+    /// Get an updated [`LinkInfo`] instance.
+    pub fn update(&mut self) -> Result<(), Error> {
+        *self = get_link(&self.handle())?;
+        Ok(())
+    }
+}
+
 /// A link handle can be either a string or a numeric id.
 #[derive(Debug, Clone)]
 pub enum LinkHandle {
@@ -179,8 +191,8 @@ impl FromStr for LinkHandle {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s.parse::<u32>() {
-            Ok(id) => LinkHandle::Id(id),
-            Err(_) => LinkHandle::Name(s.to_string()),
+            Ok(id) => Self::Id(id),
+            Err(_) => Self::Name(s.into()),
         })
     }
 }
@@ -191,8 +203,8 @@ pub fn get_links() -> Result<Vec<LinkInfo>, Error> {
 }
 
 /// Get a datalink with the given `id`.
-pub fn get_link(id: u32) -> Result<LinkInfo, Error> {
-    crate::link::get_link(id)
+pub fn get_link(handle: &LinkHandle) -> Result<LinkInfo, Error> {
+    crate::link::get_link(handle.id()?)
 }
 
 /// Given a datalink name, return it's numeric id.
@@ -424,6 +436,3 @@ impl FromStr for Ipv4Prefix {
         })
     }
 }
-
-#[cfg(test)]
-mod tests;

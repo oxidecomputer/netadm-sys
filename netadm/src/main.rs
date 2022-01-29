@@ -3,7 +3,7 @@
 use anyhow::{anyhow, Result};
 use clap::{AppSettings, Parser};
 use colored::*;
-use netadm_sys::{
+use libnet::{
     self, add_route, create_ipaddr, create_simnet_link, create_vnic_link,
     get_ipaddr_info, get_ipaddrs, get_link, get_links, ip, route, IpPrefix,
     IpState, LinkFlags, LinkHandle,
@@ -329,15 +329,15 @@ fn main() {
 }
 
 fn connect_simnet_peers(_opts: &Opts, c: &SimnetConnect) -> Result<()> {
-    Ok(netadm_sys::connect_simnet_peers(&c.sim_a, &c.sim_b)?)
+    Ok(libnet::connect_simnet_peers(&c.sim_a, &c.sim_b)?)
 }
 
 fn delete_link(_opts: &Opts, _d: &Delete, l: &DeleteLink) -> Result<()> {
-    Ok(netadm_sys::delete_link(&l.handle, LinkFlags::Active)?)
+    Ok(libnet::delete_link(&l.handle, LinkFlags::Active)?)
 }
 
 fn delete_addr(_opts: &Opts, _d: &Delete, a: &DeleteAddr) -> Result<()> {
-    Ok(netadm_sys::delete_ipaddr(&a.name)?)
+    Ok(libnet::delete_ipaddr(&a.name)?)
 }
 
 fn create_simnet(_opts: &Opts, _c: &Create, s: &CreateSimnet) -> Result<()> {
@@ -365,7 +365,7 @@ fn create_route(_opts: &Opts, _c: &Create, c: &CreateRoute) -> Result<()> {
 }
 
 fn delete_route(_opts: &Opts, _c: &Delete, c: &DeleteRoute) -> Result<()> {
-    netadm_sys::delete_route(c.destination, c.gateway)?;
+    libnet::delete_route(c.destination, c.gateway)?;
     // should we print back?
     Ok(())
 }
@@ -383,7 +383,7 @@ fn enable_v6_function(
     _c: &Enable,
     cmd: &EnableV6Subcommand,
 ) -> Result<()> {
-    netadm_sys::enable_v6_link_local(&cmd.interface)?;
+    libnet::enable_v6_link_local(&cmd.interface)?;
     Ok(())
 }
 
@@ -415,7 +415,7 @@ fn show_links(_opts: &Opts, _s: &Show, _l: &ShowLinks) -> Result<()> {
     for l in links.iter() {
         let mut name = l.name.clone();
         if l.over != 0 {
-            if let Ok(info) = get_link(l.over) {
+            if let Ok(info) = get_link(&LinkHandle::Id(l.over)) {
                 name = format!(
                     "{}{}{}",
                     name,

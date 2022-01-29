@@ -3,12 +3,10 @@ name = "netadm"
 version = "0.1.0"
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 anyhow = "1.0"
 clap = { version = "3.0.0-beta.5", features = ["color"] }
-netadm-sys = { path = "../lib" }
+libnet = { path = "../libnet" }
 tabwriter = { version = "1", features = ["ansi_formatting"] }
 colored = "2"
 tracing = "0.1"
