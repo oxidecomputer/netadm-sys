@@ -1,9 +1,8 @@
 // Copyright 2021 Oxide Computer Company
 use anyhow::Result;
 use libnet::{
-    connect_simnet_peers, create_simnet_link, create_vnic_link, delete_link,
-    get_link, get_links, DropIp, DropLink, Error, LinkFlags, LinkHandle,
-    LinkInfo,
+    connect_simnet_peers, create_simnet_link, create_vnic_link, get_link,
+    get_links, DropLink, LinkFlags, LinkHandle,
 };
 
 /// The tests in this file test layer-2 functionality in libnet.

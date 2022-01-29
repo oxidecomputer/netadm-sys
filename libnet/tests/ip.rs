@@ -1,8 +1,7 @@
 use anyhow::Result;
 use libnet::{
-    create_ipaddr, create_simnet_link, delete_ipaddr, enable_v6_link_local,
-    get_ipaddr_info, get_ipaddrs, DropIp, DropLink, IpInfo, Ipv6Prefix,
-    LinkFlags,
+    create_simnet_link, enable_v6_link_local, get_ipaddr_info, get_ipaddrs,
+    DropIp, DropLink, LinkFlags,
 };
 use std::net::IpAddr;
 use std::str::FromStr;
