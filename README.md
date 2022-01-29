@@ -61,13 +61,13 @@ illumos.
 
 ### Phase 1
 
-The first phase involves establishing the API and it's underlying implementation
-in `libnet`. In this phase `libnet` will be developed to support several
-applications simultaneously. This is to get away from the idea that the library
-exists to support a CLI administrative client. There are several high value
-targets to support under development at Oxide, some of which are shown in the
-diagram below. Of course, there will still be an admin CLI `netadm` but this is
-not the primary concern.
+The first phase involves establishing a public stable networking API and
+building out it's underlying implementation in `libnet`. In this phase `libnet`
+will be developed to support several applications simultaneously. This is to get
+away from the idea that the library exists to support a CLI administrative
+client. There are several high value targets to support under development at
+Oxide, some of which are shown in the diagram below. Of course, there will still
+be an admin CLI `netadm` but this is not the primary concern.
 
 ```
             L3:

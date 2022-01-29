@@ -1,8 +1,8 @@
 // Copyright 2021 Oxide Computer Company
 use anyhow::Result;
 use libnet::{
-    connect_simnet_peers, create_simnet_link, delete_link, get_link, get_links,
-    Error, LinkFlags, LinkHandle, LinkInfo,
+    connect_simnet_peers, create_simnet_link, create_vnic_link, delete_link,
+    get_link, get_links, Error, LinkFlags, LinkHandle, LinkInfo,
 };
 
 /// The tests in this file test layer-2 functionality in libnet.
@@ -10,9 +10,13 @@ use libnet::{
 /// Most tests need to be run as a user with administrative privileges.
 ///
 /// Conventions:
+///
 ///   - When a link is created for testing purposes it is prefixed with
 ///     "lnt_<prefix>" where prefix is unique to the test that is running. This
 ///     is so test can be run concurrently with out name collisions.
+///
+///   - All links should be created using the DropLink type. This is to ensure
+///     tests that fail do not leave test links behind on the system.
 
 struct DropLink {
     info: LinkInfo,
@@ -82,14 +86,15 @@ fn test_simnet_lifecycle() -> Result<()> {
     let flags = LinkFlags::Active;
 
     // create a simnet link
-    let create_info = create_simnet_link(name, flags).expect("create link");
+    let sim0: DropLink =
+        create_simnet_link(name, flags).expect("create link").into();
 
     // ask for the link we just created
-    let get_info = get_link(&handle).expect("get link");
-    assert_eq!(create_info, get_info);
+    let info = get_link(&handle).expect("get link");
+    assert_eq!(sim0.info, info);
 
     // delete the link
-    delete_link(&handle, flags).expect("delete link");
+    drop(sim0);
 
     // make sure the link no longer exists
     get_link(&handle).expect_err("zombie link");
@@ -119,6 +124,39 @@ fn test_simnet_connect() -> Result<()> {
     // ensure the objects are linked
     assert_eq!(sim0.info.over, sim1.info.id);
     assert_eq!(sim1.info.over, sim0.info.id);
+
+    Ok(())
+}
+
+// Vnic Tests =================================================================
+
+/// Create, query and destroy a vnic
+#[test]
+fn test_vnic_lifecycle() -> Result<()> {
+    let name = "lnt_vc_vnic0";
+    let flags = LinkFlags::Active;
+
+    // first create a simnet link for this vnic to hang off of
+    let sim0: DropLink = create_simnet_link("lnt_vc_sim0", flags)
+        .expect("create simnet")
+        .into();
+
+    // create vnic
+    let vnic0: DropLink = create_vnic_link(name, &sim0.handle(), flags)
+        .expect("create vnic")
+        .into();
+
+    // ask for the vnic we just created
+    let info = get_link(&vnic0.handle()).expect("get vnic");
+    assert_eq!(vnic0.info, info);
+    // ensure the vnic is attached to the simnet link
+    assert_eq!(vnic0.info.over, sim0.info.id);
+
+    // delete the vnic
+    drop(vnic0);
+
+    // make sure the link no longer exists
+    get_link(&LinkHandle::Name(name.into())).expect_err("zombie link");
 
     Ok(())
 }
