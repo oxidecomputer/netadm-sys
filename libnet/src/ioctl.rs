@@ -931,20 +931,16 @@ pub fn get_ipaddr_info(name: &str) -> Result<IpInfo, Error> {
         }
 
         let ss = match af as i32 {
-            libc::AF_INET => {
-                s4
-            }
+            libc::AF_INET => s4,
             libc::AF_INET6 => {
-                let sin6 = &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage
+                let sin6 = &mut req.lifr_lifru.lifru_addr
+                    as *mut sockaddr_storage
                     as *mut sockaddr_in6;
                 (*sin6).sin6_family = AF_INET6 as u16;
                 s6
             }
-            _ => {
-                return Err(Error::NotFound(name.into()))
-            }
+            _ => return Err(Error::NotFound(name.into())),
         };
-
 
         // get addr
         let ret = ioctl(ss, sys::SIOCGLIFADDR, &req);
@@ -983,7 +979,7 @@ unsafe fn ipaddr_info(
         None => {
             // this typically means that an interface is plumbed but the ip
             // address has been removed, which is ok.
-            return Ok(None)
+            return Ok(None);
         }
     };
 

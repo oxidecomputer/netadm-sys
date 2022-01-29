@@ -1,18 +1,10 @@
 use anyhow::Result;
-use std::net::IpAddr;
 use libnet::{
-    create_simnet_link,
-    create_ipaddr,
-    enable_v6_link_local,
-    get_ipaddrs,
-    get_ipaddr_info,
-    delete_ipaddr,
-    IpInfo,
-    Ipv6Prefix,
+    create_ipaddr, create_simnet_link, delete_ipaddr, enable_v6_link_local,
+    get_ipaddr_info, get_ipaddrs, DropIp, DropLink, IpInfo, Ipv6Prefix,
     LinkFlags,
-    DropIp,
-    DropLink,
 };
+use std::net::IpAddr;
 use std::str::FromStr;
 
 /// The tests in this file test IP address functionality in libnet.
@@ -51,7 +43,6 @@ fn test_address_consistency() -> Result<()> {
     let addrs = get_ipaddrs().expect("get addresses");
 
     for (_, link_addrs) in addrs {
-
         for addr in link_addrs {
             let (name, _) = addr.obj().expect("address name");
 
@@ -61,7 +52,7 @@ fn test_address_consistency() -> Result<()> {
             // comparison below.  This test assumes there is no other active
             // network configuration going on while the test is being run.
             if name.ends_with("lnt") {
-                continue
+                continue;
             }
 
             let same_addr = get_ipaddr_info(&name).expect("get addr");
@@ -72,13 +63,11 @@ fn test_address_consistency() -> Result<()> {
     Ok(())
 }
 
-
 // IPv6 Tests =================================================================
 
 /// Add and destory a IPv6 local address
 #[test]
 fn test_v6_lifecycle() -> Result<()> {
-
     let sim0: DropLink = create_simnet_link("lnt_v6ls_sim3", LinkFlags::Active)
         .expect("create sim0")
         .into();
@@ -95,7 +84,7 @@ fn test_v6_lifecycle() -> Result<()> {
 
     match addr.info.addr {
         IpAddr::V6(v6) => assert_eq!(v6.segments()[0], 0xfe80),
-        _ => panic!("not a v6 addr")
+        _ => panic!("not a v6 addr"),
     }
     assert_eq!(10, addr.info.mask as u32);
 
@@ -106,5 +95,4 @@ fn test_v6_lifecycle() -> Result<()> {
     drop(sim0);
 
     Ok(())
-
 }

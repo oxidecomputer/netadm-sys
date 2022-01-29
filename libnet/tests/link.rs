@@ -2,8 +2,8 @@
 use anyhow::Result;
 use libnet::{
     connect_simnet_peers, create_simnet_link, create_vnic_link, delete_link,
-    get_link, get_links, Error, LinkFlags, LinkHandle, LinkInfo,
-    DropLink, DropIp,
+    get_link, get_links, DropIp, DropLink, Error, LinkFlags, LinkHandle,
+    LinkInfo,
 };
 
 /// The tests in this file test layer-2 functionality in libnet.
@@ -19,7 +19,6 @@ use libnet::{
 ///
 ///   - All links should be created using the DropLink type. This is to ensure
 ///     tests that fail do not leave test links behind on the system.
-
 
 // Basic Tests ================================================================
 

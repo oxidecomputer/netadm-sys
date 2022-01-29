@@ -298,12 +298,12 @@ impl IpInfo {
     pub fn obj(&self) -> Result<(String, String), Error> {
         match crate::ip::ifname_to_addrobj(&self.ifname, self.family) {
             Ok((name, kind)) => Ok((name, kind)),
-            Err(e) => Err(Error::Ipmgmtd(e.to_string()))
+            Err(e) => Err(Error::Ipmgmtd(e)),
         }
     }
 }
 
-/// Get a list of all IP addresses on the system. 
+/// Get a list of all IP addresses on the system.
 ///
 /// The return value is a map whose keys are data link names, and values are the
 /// addresses associated with those links.
@@ -394,11 +394,15 @@ impl FromStr for IpPrefix {
 }
 
 impl From<Ipv6Prefix> for IpPrefix {
-    fn from(prefix: Ipv6Prefix) -> Self { IpPrefix::V6(prefix) }
+    fn from(prefix: Ipv6Prefix) -> Self {
+        IpPrefix::V6(prefix)
+    }
 }
 
 impl From<Ipv4Prefix> for IpPrefix {
-    fn from(prefix: Ipv4Prefix) -> Self { IpPrefix::V4(prefix) }
+    fn from(prefix: Ipv4Prefix) -> Self {
+        IpPrefix::V4(prefix)
+    }
 }
 
 /// An IPv6 address with a mask to indicate how many leading bits are
@@ -491,7 +495,7 @@ impl From<LinkInfo> for DropLink {
 /// A wrapper for IpInfo that deletes the associated address when dropped. Mostly
 /// for testing purposes< carefully.
 pub struct DropIp {
-    pub info: IpInfo
+    pub info: IpInfo,
 }
 impl Drop for DropIp {
     fn drop(&mut self) {
@@ -516,7 +520,7 @@ impl From<IpInfo> for DropIp {
 /// A wrapper for a link name that deletes the associated IPv6 link localaddress
 /// when dropped. Mostly for testing purposes< carefully.
 pub struct DropLinkLocal {
-    pub name: String
+    pub name: String,
 }
 impl Drop for DropLinkLocal {
     fn drop(&mut self) {
