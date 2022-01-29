@@ -56,6 +56,14 @@ fn test_link_consistency() -> Result<()> {
     let links = get_links().expect("get links");
 
     for link in links {
+        // Skip over links being manipulated in parallel by other tests. This
+        // can cause a race condition where we read a link in the get_links call
+        // above and it has changed by the time we make the comparison below.
+        // This test assumes there is no other active network configuration
+        // going on while the test is being run.
+        if link.name.starts_with("lnt") {
+            continue;
+        }
         let handle = LinkHandle::Id(link.id);
         let same_link = get_link(&handle).expect("get link");
         assert_eq!(link, same_link);
