@@ -67,7 +67,6 @@ fn send(msg: &Msg) -> std::io::Result<()> {
             break;
         }
     }
-    println!("wrote {}", n);
 
     let mut ret = [0u8; 4];
     n = 0;
@@ -78,7 +77,6 @@ fn send(msg: &Msg) -> std::io::Result<()> {
         }
     }
     let ret = i32::from_le_bytes(ret);
-    println!("read {}={}", n, ret);
 
     match ret {
         0 => Ok(()),

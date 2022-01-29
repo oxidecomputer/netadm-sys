@@ -1,7 +1,7 @@
 use anyhow::Result;
 use libnet::{
-    create_simnet_link, enable_v6_link_local, get_ipaddr_info, get_ipaddrs,
-    DropIp, DropLink, LinkFlags,
+    create_ipaddr, create_simnet_link, enable_v6_link_local, get_ipaddr_info,
+    get_ipaddrs, DropIp, DropLink, IpPrefix, Ipv6Prefix, LinkFlags,
 };
 use std::net::IpAddr;
 use std::str::FromStr;
@@ -53,6 +53,15 @@ fn test_address_consistency() -> Result<()> {
             if name.ends_with("lnt") {
                 continue;
             }
+            // skip simnet interfaces as they are likely from other tests and
+            // may change out from under us.
+            if name.contains("sim") {
+                continue;
+            }
+            // this can happen due to races with other tests
+            if name == "" {
+                continue;
+            }
 
             let same_addr = get_ipaddr_info(&name).expect("get addr");
             assert_eq!(addr, same_addr);
@@ -64,9 +73,26 @@ fn test_address_consistency() -> Result<()> {
 
 // IPv6 Tests =================================================================
 
-/// Add and destory a IPv6 local address
+/// Add and destory an IPv6 static address
 #[test]
-fn test_v6_lifecycle() -> Result<()> {
+fn test_v6_static_lifecycle() -> Result<()> {
+    let name = "lo0/v6slnt";
+    let prefix =
+        Ipv6Prefix::from_str("fd00:1701:d::1/64").expect("parse prefix");
+
+    // create a static address on the loopback device
+    create_ipaddr(name, IpPrefix::V6(prefix)).expect("create addr");
+
+    // get the address we just created and chekc equivalence
+    let addr: DropIp = get_ipaddr_info(name).expect("get info").into();
+    assert_eq!(addr.info.addr, prefix.addr);
+
+    Ok(())
+}
+
+/// Add and destory an IPv6 link-local address
+#[test]
+fn test_v6_local_lifecycle() -> Result<()> {
     let sim0: DropLink = create_simnet_link("lnt_v6ls_sim3", LinkFlags::Active)
         .expect("create sim0")
         .into();
@@ -74,7 +100,7 @@ fn test_v6_lifecycle() -> Result<()> {
     // enable link-local
     enable_v6_link_local("lnt_v6ls_sim3").expect("enable link local");
 
-    std::thread::sleep(std::time::Duration::from_secs(2));
+    //std::thread::sleep(std::time::Duration::from_secs(2));
 
     // ask for address we just created and check equivalence
     let addr: DropIp = get_ipaddr_info("lnt_v6ls_sim3/v6")
