@@ -9,6 +9,7 @@ tracing = "0.1"
 thiserror = "1"
 libc = "0.2"
 anyhow = "1.0"
+socket2 = "0.4"
 
 # need https://github.com/jmesmon/rust-libzfs/commit/2bf2a5b1 for i32 type
 nvpair = { git = "https://github.com/jmesmon/rust-libzfs", branch = "master" }

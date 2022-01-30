@@ -51,7 +51,9 @@ pub struct IpmgmtGetAddr {
 pub struct IpmgmtSetAddr {
     pub cmd: IpmgmtCmd,
     pub flags: u32,
-    pub nvlsize: u32, //NOTE: this is a size_t in libipadm.h which is bad news for doors
+
+    //NOTE: this is a size_t in libipadm.h which is bad news for doors
+    pub nvlsize: u32,
 }
 
 impl Default for IpmgmtGetAddr {

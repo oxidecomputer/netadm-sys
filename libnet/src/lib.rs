@@ -37,8 +37,8 @@ pub enum Error {
     Kstat(String),
     #[error("ioctl: {0}")]
     Ioctl(String),
-    #[error("file i/o error: {0}")]
-    File(#[from] std::io::Error),
+    #[error("io err: {0}")]
+    Io(#[from] std::io::Error),
     #[error("encoding error: {0}")]
     Encoding(#[from] std::str::Utf8Error),
     #[error("array conversion error: {0}")]

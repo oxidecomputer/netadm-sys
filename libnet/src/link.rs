@@ -506,7 +506,7 @@ pub struct DlmgmtDoorCreateId {
 }
 
 fn dlmgmt_door_fd() -> Result<File, Error> {
-    File::open("/etc/svc/volatile/dladm/dlmgmt_door").map_err(Error::File)
+    File::open("/etc/svc/volatile/dladm/dlmgmt_door").map_err(Error::Io)
 }
 
 pub(crate) fn create_link_id(
