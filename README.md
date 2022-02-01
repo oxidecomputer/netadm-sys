@@ -26,23 +26,32 @@ illumos that need to observe and control network state and configuration have no
 good option.
 
 ```
-           L3:
-           /etc/ipadm/*
-           /etc/svc/volatile/ipadm/*
-
-           L2:
-           /etc/dladm/*
-           /etc/svc/volatile/dladm/*
-
-          ┌─────────┐┌─────────┐┌──────┐
-          │ dlmgmtd ││ ipmgmtd ││ ndpd │
-          └─────────┘└─────────┘└──────┘
-┌───────┐ ┌ ─ ─ ─ ─ ┐┌ ─ ─ ─ ─ ─ ─ ─ ─ ┐ ┌───────┐
-│ dladm │─ libdladm       libipadm      ─│ ipadm │
-└───────┘ └ ─ ─ ─ ─ ┘└ ─ ─ ─ ─ ─ ─ ─ ─ ┘ └───────┘
-          ┌────────────────────────────┐
-          │           ioctl            │
-          └────────────────────────────┘
+            ┌──────────────────────────────┐
+            │       Persistent State       │
+            │                              │
+            │  L3:                         │
+            │  /etc/ipadm/*                │
+            │  /etc/svc/volatile/ipadm/*   │
+            │                              │
+            │  L2:                         │
+            │  /etc/dladm/*                │
+            │  /etc/svc/volatile/dladm/*   │
+            └──────────────────────────────┘
+                  ▲          ▲         ▲
+                  │          │         │
+             ┌─────────┐┌─────────┐┌──────┐
+             │ dlmgmtd ││ ipmgmtd ││ ndpd │
+             └─────────┘└─────────┘└──────┘
+                  ▲          ▲         ▲
+                  │          │         │
+┌───────┐    ┌ ─ ─ ─ ─ ┐┌ ─ ─ ─ ─ ─ ─ ─ ─ ┐    ┌───────┐
+│ dladm │───▶ libdladm       libipadm      ◀───│ ipadm │
+└───────┘    └ ─ ─ ─ ─ ┘└ ─ ─ ─ ─ ─ ─ ─ ─ ┘    └───────┘
+                  │              │
+                  ▼              ▼
+             ┌────────────────────────────┐
+             │           ioctl            │
+             └────────────────────────────┘
 ```
 
 Active network state is kept track of both in the kernel and in user space
@@ -70,23 +79,32 @@ Oxide, some of which are shown in the diagram below. Of course, there will still
 be an admin CLI `netadm` but this is not the primary concern.
 
 ```
-            L3:
-            /etc/ipadm/*
-            /etc/svc/volatile/ipadm/*
-
-            L2:
-            /etc/dladm/*
-            /etc/svc/volatile/dladm/*
-
-           ┌─────────┐┌─────────┐┌──────┐   ┌──────────┐
-           │ dlmgmtd ││ ipmgmtd ││ ndpd │ ┌─│sled-agent│
-           └─────────┘└─────────┘└──────┘ │ └──────────┘
-┌────────┐ ┌────────────────────────────┐ │ ┌──────────┐
-│ netadm │─│           libnet           │─┼─│  falcon  │
-└────────┘ └────────────────────────────┘ │ └──────────┘
-           ┌────────────────────────────┐ │ ┌──────────┐
-           │           ioctl            │ └─│ propolis │
-           └────────────────────────────┘   └──────────┘
+             ┌──────────────────────────────┐
+             │       Persistent State       │
+             │                              │
+             │  L3:                         │
+             │  /etc/ipadm/*                │
+             │  /etc/svc/volatile/ipadm/*   │
+             │                              │
+             │  L2:                         │
+             │  /etc/dladm/*                │
+             │  /etc/svc/volatile/dladm/*   │
+             └──────────────────────────────┘
+                  ▲          ▲         ▲
+                  │          │         │
+              ┌─────────┐┌─────────┐┌──────┐
+              │ dlmgmtd ││ ipmgmtd ││ ndpd │
+              └─────────┘└─────────┘└──────┘   ┌──────────┐
+                   ▲          ▲         ▲    ┌─│sled-agent│
+                   │          │         │    │ └──────────┘
+┌────────┐    ┌────────────────────────────┐ │ ┌──────────┐
+│ netadm │───▶│           libnet           │◀┼─│  falcon  │
+└────────┘    └────────────────────────────┘ │ └──────────┘
+                             │               │ ┌──────────┐
+                             ▼               └─│ propolis │
+              ┌────────────────────────────┐   └──────────┘
+              │           ioctl            │
+              └────────────────────────────┘
 ```
 
 The interfaces to other parts of the system will remain the same - as painful as
@@ -105,24 +123,27 @@ interfaces directly from their own code.
 ### Phase 2
 
 ```
-                                            ┌──────────┐
-                                          ┌─│ netinit  │
-            L3:                           │ └──────────┘
-            /etc/ipadm/*                  │ ┌──────────┐
-            /etc/svc/volatile/ipadm/*     ├─│  dhcpd   │
-                                          │ └──────────┘
-            L2:                           │ ┌──────────┐
-            /etc/dladm/*                  ├─│   ndpd   │
-            /etc/svc/volatile/dladm/*     │ └──────────┘
-                                          │ ┌──────────┐
-┌────────┐ ┌────────────────────────────┐ ├─│sled-agent│
-│ netadm │─│           libnet           │─┤ └──────────┘
-└────────┘ └────────────────────────────┘ │ ┌──────────┐
-           ┌────────────────────────────┐ ├─│  falcon  │
-           │           ioctl            │ │ └──────────┘
-           └────────────────────────────┘ │ ┌──────────┐
-                                          └─│ propolis │
-                                            └──────────┘
+              ┌──────────────────────────────┐                  
+              │       Persistent State       │                  
+              │                              │                  
+              │  L3:                         │      ┌──────────┐
+              │  /etc/ipadm/*                │  ┌───│ netinit  │
+              │  /etc/svc/volatile/ipadm/*   │  │   └──────────┘
+              │                              │  │   ┌──────────┐
+              │  L2:                         │  ├───│   dhcp   │
+              │  /etc/dladm/*                │  │   └──────────┘
+              │  /etc/svc/volatile/dladm/*   │  │   ┌──────────┐
+              └──────────────────────────────┘  ├───│   ndpd   │
+                   ▲          ▲         ▲       │   └──────────┘
+                   │          │         │       │   ┌──────────┐
+┌────────┐     ┌────────────────────────────┐   ├───│sled-agent│
+│ netadm │────▶│           libnet           │◀──┤   └──────────┘
+└────────┘     └────────────────────────────┘   │   ┌──────────┐
+                              │                 ├───│  falcon  │
+                              ▼                 │   └──────────┘
+               ┌────────────────────────────┐   │   ┌──────────┐
+               │           ioctl            │   └───│ propolis │
+               └────────────────────────────┘       └──────────┘
 ```
 
 Phase will begin right after phase 1 has produced a stable API and will be a
