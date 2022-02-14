@@ -509,7 +509,7 @@ fn dlmgmt_door_fd() -> Result<File, Error> {
     File::open("/etc/svc/volatile/dladm/dlmgmt_door").map_err(Error::Io)
 }
 
-pub(crate) fn create_link_id(
+pub fn create_link_id(
     name: &str,
     class: LinkClass,
     flags: LinkFlags,
@@ -554,7 +554,7 @@ struct DlmgmtDoorDestroyId {
     flags: u32,
 }
 
-pub(crate) fn delete_link_id(id: u32, flags: LinkFlags) -> Result<(), Error> {
+pub fn delete_link_id(id: u32, flags: LinkFlags) -> Result<(), Error> {
     let f = dlmgmt_door_fd()?;
 
     let request = DlmgmtDoorDestroyId {
