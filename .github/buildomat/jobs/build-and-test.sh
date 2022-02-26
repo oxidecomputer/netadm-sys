@@ -5,8 +5,8 @@
 #: target = "helios"
 #: rust_toolchain = "nightly-2021-09-03"
 #: output_rules = [
-#:   "target/debug/netadm",
-#:   "target/release/netadm",
+#:   "/work/debug/*",
+#:   "/work/release/*",
 #: ]
 #:
 
@@ -20,6 +20,12 @@ rustc --version
 banner build
 ptime -m cargo build
 ptime -m cargo build --release
+
+for x in debug release
+do
+    mkdir -p /work/$x
+    cp target/$x/netadm /work/$x/netadm
+done
 
 banner check
 cargo fmt -- --check
