@@ -102,7 +102,8 @@ pub enum LinkClass {
     Bridge = 0x40,
     IPtun = 0x80,
     Part = 0x100,
-    Xde = 0x200,
+    Overlay = 0x200,
+    Xde = 0x400,
     All = 0x2ff,
 }
 
@@ -119,6 +120,7 @@ impl Display for LinkClass {
             LinkClass::IPtun => write!(f, "iptun"),
             LinkClass::Part => write!(f, "part"),
             LinkClass::Xde => write!(f, "xde"),
+            LinkClass::Overlay => write!(f, "overlay"),
             LinkClass::All => write!(f, "all"),
         }
     }
