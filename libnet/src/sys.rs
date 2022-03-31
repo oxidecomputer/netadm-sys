@@ -569,10 +569,14 @@ pub const IFF_CANTCHANGE: u64 = 8736013826906;
 pub const IFF_IPMP_CANTCHANGE: u32 = 268435456;
 pub const IFF_IPMP_INVALID: u64 = 8256487552;
 
-pub const IPMGMT_ACTIVE: u32 = 0x00000001;
-pub const IPMGMT_PERSIST: u32 = 0x00000002;
-pub const IPMGMT_INIT: u32 = 0x00000004;
-pub const IPMGMT_PROPS_ONLY: u32 = 0x00000008;
+pub const IPMGMT_APPEND: u32 = 0x00000001;
+pub const IPMGMT_REMOVE: u32 = 0x00000002;
+pub const IPMGMT_ACTIVE: u32 = 0x00000004;
+pub const IPMGMT_PERSIST: u32 = 0x00000008;
+pub const IPMGMT_INIT: u32 = 0x00000010;
+pub const IPMGMT_PROPS_ONLY: u32 = 0x00000020;
+pub const IPMGMT_UPDATE_IF: u32 = 0x00000040;
+pub const IPMGMT_UPDATE_IPMP: u32 = 0x00000080;
 
 extern "C" {
     pub static mut errno: ::std::os::raw::c_int;
