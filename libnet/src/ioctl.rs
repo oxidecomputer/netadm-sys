@@ -814,7 +814,7 @@ fn parse_ifspec(ifname: &str) -> IfSpec {
 /// Get information about a specific IP interface
 pub fn get_ipaddr_info(name: &str) -> Result<IpInfo, Error> {
     unsafe {
-        let (_, src, af, mut ifname, lifnum) = addrobjname_to_addrobj(name)
+        let (_, _, af, mut ifname, lifnum) = addrobjname_to_addrobj(name)
             .map_err(|e| Error::Ioctl(format!("get addrobj: {}", e)))?;
 
         let s4 = Socket::new(Domain::IPV4, Type::DGRAM, None)?;
@@ -823,7 +823,6 @@ pub fn get_ipaddr_info(name: &str) -> Result<IpInfo, Error> {
         if lifnum > 0 {
             ifname = format!("{}:{}", ifname, lifnum);
         }
-        println!("ifname: {} {}", ifname, src);
 
         let mut req = sys::lifreq::new();
         for (i, c) in ifname.chars().enumerate() {
