@@ -535,7 +535,7 @@ pub(crate) fn delete_ipaddr(objname: impl AsRef<str>) -> Result<(), Error> {
             if resp.lnum == 0 {
                 match crate::ndpd::delete_addrs(ifname) {
                     Ok(_) => {}
-                    Err(e) => println!("ndp delete addrs: {}", e.to_string()),
+                    Err(e) => println!("ndp delete addrs: {}", e),
                 };
             }
             Socket::new(Domain::IPV6, Type::DGRAM, None)?
@@ -648,7 +648,7 @@ fn plumb_for_af(name: &str, ifflags: u64) -> Result<(), Error> {
         Err(e) => {
             return Err(Error::Ioctl(format!(
                 "DLPI open: {}: {}",
-                e.to_string(),
+                e,
                 sys::errno_string()
             )));
         }
@@ -656,7 +656,7 @@ fn plumb_for_af(name: &str, ifflags: u64) -> Result<(), Error> {
     let ip_fd = match ip_h.fd() {
         Ok(fd) => fd,
         Err(e) => {
-            return Err(Error::Ioctl(format!("DLPI IP fd: {}", e.to_string())));
+            return Err(Error::Ioctl(format!("DLPI IP fd: {}", e)));
         }
     };
 
@@ -725,10 +725,7 @@ fn plumb_for_af(name: &str, ifflags: u64) -> Result<(), Error> {
     let arp_fd = match arp_h.fd() {
         Ok(fd) => fd,
         Err(e) => {
-            return Err(Error::Ioctl(format!(
-                "DLPI ARP fd: {}",
-                e.to_string()
-            )));
+            return Err(Error::Ioctl(format!("DLPI ARP fd: {}", e)));
         }
     };
 
@@ -817,7 +814,7 @@ fn parse_ifspec(ifname: &str) -> IfSpec {
 /// Get information about a specific IP interface
 pub fn get_ipaddr_info(name: &str) -> Result<IpInfo, Error> {
     unsafe {
-        let (_, _, af, mut ifname, lifnum) = addrobjname_to_addrobj(name)
+        let (_, src, af, mut ifname, lifnum) = addrobjname_to_addrobj(name)
             .map_err(|e| Error::Ioctl(format!("get addrobj: {}", e)))?;
 
         let s4 = Socket::new(Domain::IPV4, Type::DGRAM, None)?;
@@ -826,6 +823,7 @@ pub fn get_ipaddr_info(name: &str) -> Result<IpInfo, Error> {
         if lifnum > 0 {
             ifname = format!("{}:{}", ifname, lifnum);
         }
+        println!("ifname: {} {}", ifname, src);
 
         let mut req = sys::lifreq::new();
         for (i, c) in ifname.chars().enumerate() {
@@ -1007,9 +1005,7 @@ pub fn create_ip_addr_linklocal(
         crate::ndpd::create_addrs(
             ifname, *sin6, intfidlen, stateless, stateful, objname,
         )
-        .map_err(|e| {
-            Error::Ioctl(format!("ndp create addrs: {}", e.to_string()))
-        })?;
+        .map_err(|e| Error::Ioctl(format!("ndp create addrs: {}", e)))?;
 
         ipmgmtd_persist(objname, ifname, lifnum, None, &f)?;
     }
