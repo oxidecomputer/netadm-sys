@@ -271,7 +271,7 @@ pub fn connect_simnet_peers(
 // IP address management ------------------------------------------------------
 
 /// The state of an IP address in the kernel.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[repr(i32)]
 pub enum IpState {
     Disabled = 0,
@@ -283,7 +283,7 @@ pub enum IpState {
 }
 
 /// Information in the kernel about an IP address.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct IpInfo {
     pub ifname: String,
     pub index: i32,
