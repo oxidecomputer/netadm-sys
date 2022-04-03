@@ -90,7 +90,7 @@ impl Display for LinkFlags {
 }
 
 /// Link class specifies the type of datalink.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[repr(C)]
 pub enum LinkClass {
     Phys = 0x01,
@@ -127,7 +127,7 @@ impl Display for LinkClass {
 }
 
 /// Link state indicates the carrier status of the link.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum LinkState {
     Unknown,
     Down,
@@ -151,7 +151,7 @@ impl Display for LinkState {
 }
 
 /// Information about a datalink.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct LinkInfo {
     pub id: u32,
     pub name: String,
