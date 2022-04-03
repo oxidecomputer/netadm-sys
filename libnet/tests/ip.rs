@@ -98,7 +98,7 @@ fn test_v6_local_lifecycle() -> Result<()> {
         .into();
 
     // enable link-local
-    enable_v6_link_local("lnt_v6ls_sim3").expect("enable link local");
+    enable_v6_link_local("lnt_v6ls_sim3", "v6").expect("enable link local");
 
     // ask for address we just created and check equivalence
     let addr: DropIp = get_ipaddr_info("lnt_v6ls_sim3/v6")

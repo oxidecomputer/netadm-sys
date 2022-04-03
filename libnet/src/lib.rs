@@ -333,8 +333,11 @@ pub fn create_ipaddr(
 }
 
 /// Enable generation of an IPv6 link-local address for an interface
-pub fn enable_v6_link_local(name: impl AsRef<str>) -> Result<(), Error> {
-    crate::ioctl::enable_v6_link_local(name.as_ref())
+pub fn enable_v6_link_local(
+    ifname: impl AsRef<str>,
+    addrname: impl AsRef<str>,
+) -> Result<(), Error> {
+    crate::ioctl::enable_v6_link_local(ifname.as_ref(), addrname.as_ref())
 }
 
 /// Delete an IP address with the given address object name.

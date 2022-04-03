@@ -119,6 +119,8 @@ struct EnableV6Subcommand {
     function: V6Function,
     #[clap(about = "interface name")]
     interface: String,
+    #[clap(about = "address name")]
+    addr_name: String,
 }
 
 /// Enable IPv4 network functions.
@@ -383,7 +385,7 @@ fn enable_v6_function(
     _c: &Enable,
     cmd: &EnableV6Subcommand,
 ) -> Result<()> {
-    libnet::enable_v6_link_local(&cmd.interface)?;
+    libnet::enable_v6_link_local(&cmd.interface, &cmd.addr_name)?;
     Ok(())
 }
 

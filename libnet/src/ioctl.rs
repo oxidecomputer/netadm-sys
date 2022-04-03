@@ -928,8 +928,11 @@ unsafe fn ipaddr_info(
     }))
 }
 
-pub(crate) fn enable_v6_link_local(ifname: &str) -> Result<(), Error> {
-    let objname = format!("{}/v6", ifname);
+pub(crate) fn enable_v6_link_local(
+    ifname: &str,
+    addrname: &str,
+) -> Result<(), Error> {
+    let objname = format!("{}/{}", ifname, addrname);
 
     let sock = Socket::new(Domain::IPV6, Type::DGRAM, None)?;
 
