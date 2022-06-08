@@ -263,6 +263,8 @@ pub const SIOCGLIFINDEX: ioc_t = IOWR!('i', 133, lifreq) as ioc_t;
 pub const SIOCGLIFCONF: ioc_t = IOWRN!('i', 165, 16) as ioc_t;
 pub const SIOCGLIFDADSTATE: ioc_t = IOWR!('i', 190, lifreq) as ioc_t;
 pub const SIOCSLIFPREFIX: ioc_t = IOWR!('i', 191, lifreq) as ioc_t;
+pub const SIOCGNDNUM: ioc_t = IOWR!('i', 193, ndpreq) as ioc_t;
+pub const SIOCGNDS: ioc_t = IOWR!('i', 194, ndpreq) as ioc_t;
 
 macro_rules! SIMNETIOC {
     ($cmdid:expr) => {
@@ -793,6 +795,21 @@ pub struct vopstats {
     pub nvnevent: kstat_named_t,
     pub nreqzcbuf: kstat_named_t,
     pub nretzcbuf: kstat_named_t,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct ndpr_entry {
+    pub ndpre_ifname: [c_uchar; LIFNAMSIZ],
+    pub ndpre_l2_addr: [u8; 6],
+    pub ndpre_l3_addr: in6_addr,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct ndpreq {
+    pub ndpr_count: u32,
+    pub ndpr_buf: caddr_t,
 }
 
 pub const KSTAT_STRLEN: u32 = 31;

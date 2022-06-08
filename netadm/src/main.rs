@@ -88,6 +88,8 @@ enum ShowSubCommand {
     Addrs(ShowAddrs),
     #[clap(about = "show routes")]
     Routes(ShowRoutes),
+    #[clap(about = "show neighbors")]
+    Neighbors(ShowNeighbors),
 }
 
 #[derive(Parser)]
@@ -240,6 +242,9 @@ struct ShowAddrs {
 #[derive(Parser)]
 struct ShowRoutes {}
 
+#[derive(Parser)]
+struct ShowNeighbors {}
+
 fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -262,6 +267,12 @@ fn main() {
                 Ok(()) => {}
                 Err(e) => error!("{}", e),
             },
+            ShowSubCommand::Neighbors(ref n) => {
+                match show_neighbors(&opts, s, n) {
+                    Ok(()) => {}
+                    Err(e) => error!("{}", e),
+                }
+            }
         },
         SubCommand::Create(ref c) => match c.subcmd {
             CreateSubCommand::Simnet(ref sim) => {
@@ -457,10 +468,10 @@ fn show_addrs(_opts: &Opts, _s: &Show, a: &ShowAddrs) -> Result<()> {
     writeln!(
         &mut tw,
         "{}\t{}\t{}\t{}\t{}",
-        "--".bright_black(),
-        "------".bright_black(),
-        "-----".bright_black(),
         "----".bright_black(),
+        "----".bright_black(),
+        "-----".bright_black(),
+        "-------".bright_black(),
         "---------------".bright_black(),
     )?;
 
@@ -544,6 +555,45 @@ fn show_routes(_opts: &Opts, _s: &Show, _r: &ShowRoutes) -> Result<()> {
         )?;
     }
 
+    tw.flush()?;
+
+    Ok(())
+}
+
+fn show_neighbors(_opts: &Opts, _s: &Show, _r: &ShowNeighbors) -> Result<()> {
+    let mut tw = TabWriter::new(stdout());
+    writeln!(
+        &mut tw,
+        "{}\t{}\t{}",
+        "Interface".dimmed(),
+        "Neighbor L2".dimmed(),
+        "Neighbor L3".dimmed(),
+    )?;
+    writeln!(
+        &mut tw,
+        "{}\t{}\t{}",
+        "---------".dimmed(),
+        "-----------".dimmed(),
+        "-----------".dimmed(),
+    )?;
+
+    let nbrs = libnet::get_neighbors()?;
+    for n in nbrs {
+        let mac = &n.ndpre_l2_addr;
+        let macf = format!(
+            "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
+        );
+        writeln!(
+            &mut tw,
+            "{}\t{}\t{}",
+            String::from_utf8_lossy(n.ndpre_ifname.as_slice()),
+            macf.blue(),
+            color_ip(IpAddr::V6(std::net::Ipv6Addr::from(
+                n.ndpre_l3_addr.s6_addr
+            ))),
+        )?;
+    }
     tw.flush()?;
 
     Ok(())

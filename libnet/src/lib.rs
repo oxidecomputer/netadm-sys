@@ -321,6 +321,8 @@ pub fn get_ipaddrs() -> Result<BTreeMap<String, Vec<IpInfo>>, Error> {
 /// Get information about a specific IP interface
 pub use crate::ioctl::get_ipaddr_info;
 
+pub use crate::ioctl::get_neighbors;
+
 /// Create an IP address and give it the provided address object name.
 ///
 /// Standard convention is to use a name of the form

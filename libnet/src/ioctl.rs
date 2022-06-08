@@ -446,6 +446,37 @@ pub(crate) fn get_ipaddrs() -> Result<BTreeMap<String, Vec<IpInfo>>, Error> {
     Ok(result)
 }
 
+pub fn get_neighbors() -> Result<Vec<sys::ndpr_entry>, Error> {
+    let s6 = Socket::new(Domain::IPV6, Type::DGRAM, None)?;
+
+    // get number of entries
+    let mut req = sys::ndpreq {
+        ndpr_count: 0,
+        ndpr_buf: ptr::null_mut(),
+    };
+
+    unsafe {
+        rioctl!(s6, sys::SIOCGNDNUM, &req)?;
+    }
+
+    let mut nbrs: Vec<sys::ndpr_entry> = Vec::new();
+    nbrs.resize(
+        req.ndpr_count as usize,
+        sys::ndpr_entry {
+            ndpre_ifname: [0; sys::LIFNAMSIZ],
+            ndpre_l2_addr: [0; 6],
+            ndpre_l3_addr: libc::in6_addr { s6_addr: [0; 16] },
+        },
+    );
+    req.ndpr_buf = nbrs.as_mut_ptr() as *mut c_char;
+
+    unsafe {
+        rioctl!(s6, sys::SIOCGNDS, &req)?;
+    }
+
+    Ok(nbrs)
+}
+
 pub(crate) fn ipaddr_exists(objname: impl AsRef<str>) -> Result<bool, Error> {
     let f = File::open("/etc/svc/volatile/ipadm/ipmgmt_door")?;
 
