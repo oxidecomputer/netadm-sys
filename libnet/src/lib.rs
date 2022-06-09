@@ -26,7 +26,7 @@ mod ioctl;
 mod kstat;
 mod ndpd;
 mod nvlist;
-mod sys;
+pub mod sys;
 
 /// Error variants returned by netadm_sys.
 #[derive(thiserror::Error, Debug)]

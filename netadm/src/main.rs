@@ -564,17 +564,19 @@ fn show_neighbors(_opts: &Opts, _s: &Show, _r: &ShowNeighbors) -> Result<()> {
     let mut tw = TabWriter::new(stdout());
     writeln!(
         &mut tw,
-        "{}\t{}\t{}",
+        "{}\t{}\t{}\t{}",
         "Interface".dimmed(),
         "Neighbor L2".dimmed(),
         "Neighbor L3".dimmed(),
+        "State".dimmed(),
     )?;
     writeln!(
         &mut tw,
-        "{}\t{}\t{}",
+        "{}\t{}\t{}\t{}",
         "---------".dimmed(),
         "-----------".dimmed(),
         "-----------".dimmed(),
+        "-----".dimmed(),
     )?;
 
     let nbrs = libnet::get_neighbors()?;
@@ -584,14 +586,26 @@ fn show_neighbors(_opts: &Opts, _s: &Show, _r: &ShowNeighbors) -> Result<()> {
             "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
         );
+        let state = match n.ndpre_state {
+            libnet::sys::ND_UNCHANGED => "unchanged".into(),
+            libnet::sys::ND_INCOMPLETE => "incomplete".into(),
+            libnet::sys::ND_REACHABLE => "reachable".into(),
+            libnet::sys::ND_STALE => "stale".into(),
+            libnet::sys::ND_DELAY => "delay".into(),
+            libnet::sys::ND_PROBE => "probe".into(),
+            libnet::sys::ND_UNREACHABLE => "unreachable".into(),
+            libnet::sys::ND_INITIAL => "initial".into(),
+            x => format!("unknown state: {}", x),
+        };
         writeln!(
             &mut tw,
-            "{}\t{}\t{}",
+            "{}\t{}\t{}\t{}",
             String::from_utf8_lossy(n.ndpre_ifname.as_slice()),
             macf.blue(),
             color_ip(IpAddr::V6(std::net::Ipv6Addr::from(
                 n.ndpre_l3_addr.s6_addr
             ))),
+            state,
         )?;
     }
     tw.flush()?;

@@ -460,14 +460,7 @@ pub fn get_neighbors() -> Result<Vec<sys::ndpr_entry>, Error> {
     }
 
     let mut nbrs: Vec<sys::ndpr_entry> = Vec::new();
-    nbrs.resize(
-        req.ndpr_count as usize,
-        sys::ndpr_entry {
-            ndpre_ifname: [0; sys::LIFNAMSIZ],
-            ndpre_l2_addr: [0; 6],
-            ndpre_l3_addr: libc::in6_addr { s6_addr: [0; 16] },
-        },
-    );
+    nbrs.resize(req.ndpr_count as usize, sys::ndpr_entry::default());
     req.ndpr_buf = nbrs.as_mut_ptr() as *mut c_char;
 
     unsafe {

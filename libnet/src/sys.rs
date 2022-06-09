@@ -246,6 +246,12 @@ impl strioctl {
     }
 }
 
+impl Default for strioctl {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub const LIFNAMSIZ: usize = 32;
 
 pub const DLDIOC_MACADDRGET: ioc_t = DLDIOC!(0x15);
@@ -797,12 +803,33 @@ pub struct vopstats {
     pub nretzcbuf: kstat_named_t,
 }
 
+pub const ND_UNCHANGED: u16 = 0; /* For ioctls that don't modify state */
+pub const ND_INCOMPLETE: u16 = 1; /* addr resolution in progress */
+pub const ND_REACHABLE: u16 = 2; /* have recently been reachable */
+pub const ND_STALE: u16 = 3; /* may be unreachable, don't do anything */
+pub const ND_DELAY: u16 = 4; /* wait for upper layer hint */
+pub const ND_PROBE: u16 = 5; /* send probes */
+pub const ND_UNREACHABLE: u16 = 6; /* delete this route */
+pub const ND_INITIAL: u16 = 7; /* ipv4: arp resolution has not been sent yet */
+
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct ndpr_entry {
     pub ndpre_ifname: [c_uchar; LIFNAMSIZ],
     pub ndpre_l2_addr: [u8; 6],
     pub ndpre_l3_addr: in6_addr,
+    pub ndpre_state: u16,
+}
+
+impl Default for ndpr_entry {
+    fn default() -> ndpr_entry {
+        ndpr_entry {
+            ndpre_ifname: [0; LIFNAMSIZ],
+            ndpre_l2_addr: [0; 6],
+            ndpre_l3_addr: libc::in6_addr { s6_addr: [0; 16] },
+            ndpre_state: ND_UNCHANGED,
+        }
+    }
 }
 
 #[repr(C)]
