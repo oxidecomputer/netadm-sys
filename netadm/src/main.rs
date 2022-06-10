@@ -564,19 +564,21 @@ fn show_neighbors(_opts: &Opts, _s: &Show, _r: &ShowNeighbors) -> Result<()> {
     let mut tw = TabWriter::new(stdout());
     writeln!(
         &mut tw,
-        "{}\t{}\t{}\t{}",
+        "{}\t{}\t{}\t{}\t{}",
         "Interface".dimmed(),
         "Neighbor L2".dimmed(),
         "Neighbor L3".dimmed(),
         "State".dimmed(),
+        "Type".dimmed(),
     )?;
     writeln!(
         &mut tw,
-        "{}\t{}\t{}\t{}",
+        "{}\t{}\t{}\t{}\t{}",
         "---------".dimmed(),
         "-----------".dimmed(),
         "-----------".dimmed(),
         "-----".dimmed(),
+        "----".dimmed(),
     )?;
 
     let nbrs = libnet::get_neighbors()?;
@@ -597,15 +599,22 @@ fn show_neighbors(_opts: &Opts, _s: &Show, _r: &ShowNeighbors) -> Result<()> {
             libnet::sys::ND_INITIAL => "initial".into(),
             x => format!("unknown state: {}", x),
         };
+        let typ = match n.ndpre_type {
+            libnet::sys::ndp_type::NDP_TYPE_OTHER => "other",
+            libnet::sys::ndp_type::NDP_TYPE_DYNAMIC => "dynamic",
+            libnet::sys::ndp_type::NDP_TYPE_STATIC => "static",
+            libnet::sys::ndp_type::NDP_TYPE_LOCAL => "local",
+        };
         writeln!(
             &mut tw,
-            "{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}",
             String::from_utf8_lossy(n.ndpre_ifname.as_slice()),
             macf.blue(),
             color_ip(IpAddr::V6(std::net::Ipv6Addr::from(
                 n.ndpre_l3_addr.s6_addr
             ))),
             state,
+            typ,
         )?;
     }
     tw.flush()?;

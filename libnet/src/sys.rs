@@ -814,11 +814,21 @@ pub const ND_INITIAL: u16 = 7; /* ipv4: arp resolution has not been sent yet */
 
 #[repr(C)]
 #[derive(Copy, Clone)]
+pub enum ndp_type {
+    NDP_TYPE_OTHER = 1,
+    NDP_TYPE_DYNAMIC,
+    NDP_TYPE_STATIC,
+    NDP_TYPE_LOCAL,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
 pub struct ndpr_entry {
     pub ndpre_ifname: [c_uchar; LIFNAMSIZ],
     pub ndpre_l2_addr: [u8; 6],
     pub ndpre_l3_addr: in6_addr,
     pub ndpre_state: u16,
+    pub ndpre_type: ndp_type,
 }
 
 impl Default for ndpr_entry {
@@ -828,6 +838,7 @@ impl Default for ndpr_entry {
             ndpre_l2_addr: [0; 6],
             ndpre_l3_addr: libc::in6_addr { s6_addr: [0; 16] },
             ndpre_state: ND_UNCHANGED,
+            ndpre_type: ndp_type::NDP_TYPE_OTHER,
         }
     }
 }
