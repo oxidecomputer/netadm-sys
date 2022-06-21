@@ -623,7 +623,7 @@ pub fn err_string(err: i32) -> String {
 
     // Either `strerror_r` or conversion to a a UTF8 string failed; fall back
     // to a message that just includes the error number
-    format!("unknown failure (errno {err})")
+    format!("unknown failure (errno {})", err)
 }
 
 pub type kstat_ctl_t = kstat_ctl;
