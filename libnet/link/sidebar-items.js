@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["Bool",""],["DlmgmtCmd",""],["DlmgmtDoorAttrType",""]],"fn":[["create_link_id",""],["create_vnic_link",""],["delete_link_id",""],["linkname_to_id",""]],"struct":[["DlmgmtDoorCreateId",""],["DlmgmtGetLinkId",""],["DlmgmtGetName",""],["DlmgmtGetNext",""],["DlmgmtLinkRetval",""],["DlmgmtNameRetval",""]]});
