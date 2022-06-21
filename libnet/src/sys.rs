@@ -578,25 +578,52 @@ pub const IPMGMT_PROPS_ONLY: u32 = 0x00000020;
 pub const IPMGMT_UPDATE_IF: u32 = 0x00000040;
 pub const IPMGMT_UPDATE_IPMP: u32 = 0x00000080;
 
-extern "C" {
-    pub static mut errno: ::std::os::raw::c_int;
-    pub fn strerror(errnum: i32) -> *mut std::os::raw::c_char;
+fn errno_ptr() -> *mut c_int {
+    cfg_if::cfg_if! {
+        if #[cfg(target_os = "illumos")] {
+            unsafe { libc::___errno() }
+        } else if #[cfg(target_os = "linux")] {
+            unsafe { libc::__errno_location() }
+        } else {
+            compile_fail!("only linux and illumos are currently supported")
+        }
+    }
+}
+
+pub fn errno() -> c_int {
+    unsafe { *errno_ptr() }
+}
+
+pub fn clear_errno() {
+    unsafe {
+        *errno_ptr() = 0;
+    }
 }
 
 pub fn errno_string() -> String {
-    let s = unsafe { std::ffi::CStr::from_ptr(strerror(errno)) };
-    match s.to_str() {
-        Err(_) => "".to_string(),
-        Ok(s) => s.to_string(),
-    }
+    err_string(errno())
 }
 
 pub fn err_string(err: i32) -> String {
-    let s = unsafe { std::ffi::CStr::from_ptr(strerror(err)) };
-    match s.to_str() {
-        Err(_) => "".to_string(),
-        Ok(s) => s.to_string(),
+    // We could attempt to grow `buf` if we get back `ERANGE`, but (a) 128 bytes
+    // is probably more than enought and (b) if we fail we have a fallback plan
+    // anyway.
+    let mut buf = [0; 128];
+    let ret = unsafe { libc::strerror_r(err, buf.as_mut_ptr(), buf.len()) };
+    if ret == 0 {
+        // TODO-cleanup We could use `CStr::from_bytes_until_nul()` to avoid
+        // this `unsafe` block once it's stabilized. For now, `buf` contains
+        // many nul bytes (after the one added by `strerror_r`, so we'll use
+        // `CStr::from_ptr()` to search for the first nul.
+        let cstr = unsafe { std::ffi::CStr::from_ptr(buf.as_ptr()) };
+        if let Ok(s) = cstr.to_str() {
+            return s.to_string();
+        }
     }
+
+    // Either `strerror_r` or conversion to a a UTF8 string failed; fall back
+    // to a message that just includes the error number
+    format!("unknown failure (errno {})", err)
 }
 
 pub type kstat_ctl_t = kstat_ctl;

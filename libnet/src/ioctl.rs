@@ -1423,7 +1423,7 @@ pub(crate) fn create_vnic(
         arg.mac_addr[1] = 0x08;
         arg.mac_addr[2] = 0x20;
 
-        sys::errno = 0;
+        sys::clear_errno();
         rioctl!(fd, sys::VNIC_IOC_CREATE, &arg)?;
 
         crate::link::get_link(id)
