@@ -205,6 +205,7 @@ name = "libnet"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cfg-if",
  "colored",
  "dlpi",
  "libc",

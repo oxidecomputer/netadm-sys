@@ -44,7 +44,10 @@ pub fn get_routes() -> Result<Vec<Route>, Error> {
     unsafe {
         let sfd = socket(AF_ROUTE as i32, SOCK_RAW as i32, AF_UNSPEC as i32);
         if sfd < 0 {
-            return Err(Error::SystemError(format!("socket: {}", sys::errno)));
+            return Err(Error::SystemError(format!(
+                "socket: {}",
+                sys::errno()
+            )));
         }
 
         let req = rt_msghdr::default();
@@ -58,7 +61,7 @@ pub fn get_routes() -> Result<Vec<Route>, Error> {
             return Err(Error::SystemError(format!(
                 "write: {} {}",
                 n,
-                sys::errno
+                sys::errno()
             )));
         }
 
@@ -199,7 +202,10 @@ fn mod_route(
     unsafe {
         let sfd = socket(AF_ROUTE as i32, SOCK_RAW as i32, AF_UNSPEC as i32);
         if sfd < 0 {
-            return Err(Error::SystemError(format!("socket: {}", sys::errno)));
+            return Err(Error::SystemError(format!(
+                "socket: {}",
+                sys::errno()
+            )));
         }
 
         let mut msglen = size_of::<rt_msghdr>();
@@ -348,9 +354,9 @@ fn mod_route(
             }
         };
 
-        sys::errno = 0;
+        sys::clear_errno();
         let n = write(sfd, buf.as_ptr() as *const c_void, buf.len());
-        if sys::errno != 0 {
+        if sys::errno() != 0 {
             return Err(Error::SystemError(sys::errno_string()));
         }
         if n < buf.len() as isize {
