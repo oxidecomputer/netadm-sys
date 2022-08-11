@@ -235,9 +235,10 @@ pub fn create_simnet_link(
 pub fn create_vnic_link(
     name: &str,
     link: &LinkHandle,
+    mac: Option<Vec<u8>>,
     flags: LinkFlags,
 ) -> Result<LinkInfo, Error> {
-    crate::link::create_vnic_link(name, link.id()?, flags)
+    crate::link::create_vnic_link(name, link.id()?, mac, flags)
 }
 
 /// Delete a data link identified by `handle`.

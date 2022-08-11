@@ -411,10 +411,11 @@ pub(crate) fn create_simnet_link(
 pub fn create_vnic_link(
     name: &str,
     link: u32,
+    mac: Option<Vec<u8>>,
     flags: LinkFlags,
 ) -> Result<LinkInfo, Error> {
     let id = crate::link::create_link_id(name, LinkClass::Vnic, flags)?;
-    let link_info = crate::ioctl::create_vnic(id, link)?;
+    let link_info = crate::ioctl::create_vnic(id, link, mac)?;
     if (flags as u32 & LinkFlags::Persistent as u32) != 0 {
         //TODO
         //save_simnet(name, flags)?;
