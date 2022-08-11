@@ -22,11 +22,13 @@ pub mod link;
 /// state.
 pub mod route;
 
+/// System-level machinery
+pub mod sys;
+
 mod ioctl;
 mod kstat;
 mod ndpd;
 mod nvlist;
-mod sys;
 
 /// Error variants returned by netadm_sys.
 #[derive(thiserror::Error, Debug)]
@@ -300,9 +302,10 @@ pub fn get_tfport_info(link: &LinkHandle) -> Result<TfportInfo, Error> {
 pub fn create_vnic_link(
     name: &str,
     link: &LinkHandle,
+    mac: Option<Vec<u8>>,
     flags: LinkFlags,
 ) -> Result<LinkInfo, Error> {
-    crate::link::create_vnic_link(name, link.id()?, flags)
+    crate::link::create_vnic_link(name, link.id()?, mac, flags)
 }
 
 /// Delete a data link identified by `handle`.
