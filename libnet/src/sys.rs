@@ -38,6 +38,7 @@ pub const MAXMACADDRLEN: u32 = 20;
 pub const MAXPATHLEN: u32 = 1024;
 pub const MAXNAMELEN: u32 = 256;
 pub const MAXLINKNAMELEN: u32 = 32;
+pub const ETHERADDRL: u32 = 6;
 
 pub const LIFC_NOXMIT: u32 = 1;
 pub const LIFC_EXTERNAL_SOURCE: u32 = 2;
@@ -58,6 +59,7 @@ pub const SIMNET_IOC: ioc_t = 0x5132;
 pub const IPTUN_IOC: ioc_t = 0x454A;
 pub const BRIDGE_IOC: ioc_t = 0xB81D;
 pub const IBPART_IOC: ioc_t = 0x6171;
+pub const TFPORT_IOC: ioc_t = 0x1d1c;
 
 pub const IOCPARM_MASK: u32 = 0xff;
 pub const IOC_OUT: u32 = 0x40000000;
@@ -274,11 +276,21 @@ pub const SIMNET_IOC_DELETE: ioc_t = SIMNETIOC!(2);
 pub const SIMNET_IOC_INFO: ioc_t = SIMNETIOC!(3);
 pub const SIMNET_IOC_MODIFY: ioc_t = SIMNETIOC!(4);
 
+macro_rules! TFPORTIOC {
+    ($cmdid:expr) => {
+        DLD_IOC_CMD!(TFPORT_IOC, $cmdid)
+    };
+}
+pub const TFPORT_IOC_CREATE: ioc_t = TFPORTIOC!(1);
+pub const TFPORT_IOC_DELETE: ioc_t = TFPORTIOC!(2);
+pub const TFPORT_IOC_INFO: ioc_t = TFPORTIOC!(3);
+
 macro_rules! VNICIOC {
     ($cmdid:expr) => {
         DLD_IOC_CMD!(VNIC_IOC, $cmdid)
     };
 }
+
 pub const VNIC_IOC_CREATE: ioc_t = VNICIOC!(1);
 pub const VNIC_IOC_DELETE: ioc_t = VNICIOC!(2);
 pub const VNIC_IOC_INFO: ioc_t = VNICIOC!(3);

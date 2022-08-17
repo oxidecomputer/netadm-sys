@@ -191,7 +191,7 @@ pub(crate) fn get_link(id: u32) -> Result<LinkInfo, Error> {
     let mac = match crate::ioctl::get_macaddr(id) {
         Ok(mac) => mac,
         Err(e) => {
-            warn!("error fetching mach address on linkid {}: {}", id, e);
+            warn!("error fetching mac address on linkid {}: {}", id, e);
             [0u8; 6]
         }
     };
@@ -201,6 +201,13 @@ pub(crate) fn get_link(id: u32) -> Result<LinkInfo, Error> {
             Ok(info) => info.peer_link_id,
             Err(_) => {
                 warn!("could not get vnic info for {} ({})", name, id);
+                0
+            }
+        },
+        LinkClass::Tfport => match crate::ioctl::get_tfport_info(id) {
+            Ok(info) => info.pktsrc_id,
+            Err(_) => {
+                warn!("could not get tfport info for {} ({})", name, id);
                 0
             }
         },
@@ -399,7 +406,13 @@ pub(crate) fn create_simnet_link(
     flags: LinkFlags,
 ) -> Result<LinkInfo, Error> {
     let id = crate::link::create_link_id(name, LinkClass::Simnet, flags)?;
-    let link_info = crate::ioctl::create_simnet(id, flags)?;
+    let link_info = match crate::ioctl::create_simnet(id, flags) {
+        Ok(l) => Ok(l),
+        Err(e) => {
+            let _ = delete_link_id(id, flags);
+            Err(e)
+        }
+    }?;
     if (flags as u32 & LinkFlags::Persistent as u32) != 0 {
         //TODO
         //save_simnet(name, flags)?;
@@ -408,13 +421,37 @@ pub(crate) fn create_simnet_link(
     Ok(link_info)
 }
 
+pub(crate) fn create_tfport_link(
+    name: &str,
+    over: &str,
+    port: u16,
+    mac: &Option<String>,
+    flags: LinkFlags,
+) -> Result<LinkInfo, Error> {
+    let over_id = linkname_to_id(over)?;
+    let link_id = crate::link::create_link_id(name, LinkClass::Tfport, flags)?;
+    match crate::ioctl::create_tfport(link_id, over_id, port, mac) {
+        Ok(l) => Ok(l),
+        Err(e) => {
+            let _ = delete_link_id(link_id, flags);
+            Err(e)
+        }
+    }
+}
+
 pub fn create_vnic_link(
     name: &str,
     link: u32,
     flags: LinkFlags,
 ) -> Result<LinkInfo, Error> {
     let id = crate::link::create_link_id(name, LinkClass::Vnic, flags)?;
-    let link_info = crate::ioctl::create_vnic(id, link)?;
+    let link_info = match crate::ioctl::create_vnic(id, link) {
+        Ok(l) => Ok(l),
+        Err(e) => {
+            let _ = delete_link_id(id, flags);
+            Err(e)
+        }
+    }?;
     if (flags as u32 & LinkFlags::Persistent as u32) != 0 {
         //TODO
         //save_simnet(name, flags)?;
@@ -466,6 +503,13 @@ pub(crate) fn delete_link(id: u32, flags: LinkFlags) -> Result<(), Error> {
     match link.class {
         LinkClass::Simnet => {
             match crate::ioctl::delete_simnet(id) {
+                Ok(_) => {}
+                Err(e) => warn!("{}", e),
+            }
+            Ok(delete_link_id(id, flags)?)
+        }
+        LinkClass::Tfport => {
+            match crate::ioctl::delete_tfport(id) {
                 Ok(_) => {}
                 Err(e) => warn!("{}", e),
             }
