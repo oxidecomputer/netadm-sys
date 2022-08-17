@@ -425,7 +425,7 @@ pub(crate) fn create_tfport_link(
     name: &str,
     over: &str,
     port: u16,
-    mac: &Option<String>,
+    mac: Option<String>,
     flags: LinkFlags,
 ) -> Result<LinkInfo, Error> {
     let over_id = linkname_to_id(over)?;

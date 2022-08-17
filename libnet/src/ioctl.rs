@@ -1511,7 +1511,7 @@ pub(crate) fn create_tfport(
     link_id: u32,
     pktsrc_id: u32,
     port: u16,
-    mac: &Option<String>,
+    mac: Option<String>,
 ) -> Result<crate::LinkInfo, Error> {
     let (mac_len, mac_addr) = match mac {
         None => (0, [0; sys::ETHERADDRL as usize]),

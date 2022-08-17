@@ -369,7 +369,9 @@ fn create_simnet(_opts: &Opts, _c: &Create, s: &CreateSimnet) -> Result<()> {
 }
 
 fn create_tfport(_opts: &Opts, _c: &Create, s: &CreateTfport) -> Result<()> {
-    create_tfport_link(&s.name, &s.over, s.port, &s.mac, LinkFlags::Active)?;
+    let mac = s.mac.as_ref().map(|m| m.to_string());
+
+    create_tfport_link(&s.name, &s.over, s.port, mac, LinkFlags::Active)?;
     Ok(())
 }
 
