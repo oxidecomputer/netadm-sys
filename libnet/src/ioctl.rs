@@ -116,6 +116,33 @@ pub(crate) fn connect_simnet_peers(
     }
 }
 
+#[repr(C)]
+pub(crate) struct TfportInfoIoc {
+    pub(crate) link_id: u32,
+    pub(crate) pktsrc_id: u32,
+    pub(crate) port: u16,
+    pub(crate) mac_len: u32,
+    pub(crate) mac_addr: [u8; sys::ETHERADDRL as usize],
+}
+
+pub(crate) fn get_tfport_info(link_id: u32) -> Result<TfportInfoIoc, Error> {
+    let fd = dld_fd()?;
+
+    unsafe {
+        let arg = TfportInfoIoc {
+            link_id,
+            pktsrc_id: 0,
+            port: 0,
+            mac_len: 0,
+            mac_addr: [0; sys::ETHERADDRL as usize],
+        };
+
+        rioctl!(fd, sys::TFPORT_IOC_INFO, &arg)?;
+
+        Ok(arg)
+    }
+}
+
 #[allow(dead_code)]
 #[repr(i32)]
 pub enum VnicMacAddrType {
@@ -1459,11 +1486,6 @@ pub struct SimnetIocDelete {
     flags: u32,
 }
 
-#[repr(C)]
-pub struct VnicIocDelete {
-    link_id: u32,
-}
-
 pub(crate) fn delete_simnet(id: u32) -> Result<(), Error> {
     unsafe {
         let fd = dld_fd()?;
@@ -1474,6 +1496,78 @@ pub(crate) fn delete_simnet(id: u32) -> Result<(), Error> {
         rioctl!(fd, sys::SIMNET_IOC_DELETE, &arg)?;
     }
     Ok(())
+}
+
+#[repr(C)]
+pub struct TfportIocCreate {
+    pub link_id: u32,
+    pub pktsrc_id: u32,
+    pub port: u16,
+    pub mac_len: u32,
+    pub mac_addr: [u8; sys::ETHERADDRL as usize],
+}
+
+pub(crate) fn create_tfport(
+    link_id: u32,
+    pktsrc_id: u32,
+    port: u16,
+    mac: Option<String>,
+) -> Result<crate::LinkInfo, Error> {
+    let (mac_len, mac_addr) = match mac {
+        None => (0, [0; sys::ETHERADDRL as usize]),
+        Some(mac) => {
+            let mut mac_addr = [0; sys::ETHERADDRL as usize];
+            let v: Vec<&str> = mac.split(':').collect();
+
+            if v.len() != 6 {
+                return Err(Error::BadArgument(
+                    "invalid mac address".to_string(),
+                ));
+            }
+
+            for (i, octet) in v.iter().enumerate() {
+                mac_addr[i] = u8::from_str_radix(octet, 16).map_err(|_| {
+                    Error::BadArgument("invalid mac address".to_string())
+                })?;
+            }
+            (sys::ETHERADDRL, mac_addr)
+        }
+    };
+
+    unsafe {
+        let fd = dld_fd()?;
+        debug!("creating tfport with id {}", link_id);
+        let arg = TfportIocCreate {
+            link_id,
+            pktsrc_id,
+            port,
+            mac_len,
+            mac_addr,
+        };
+
+        rioctl!(fd, sys::TFPORT_IOC_CREATE, &arg)?;
+    }
+
+    crate::link::get_link(link_id)
+}
+
+#[repr(C)]
+pub struct TfportIocDelete {
+    link_id: u32,
+}
+
+pub(crate) fn delete_tfport(link_id: u32) -> Result<(), Error> {
+    unsafe {
+        let fd = dld_fd()?;
+        let arg = TfportIocDelete { link_id };
+        rioctl!(fd, sys::TFPORT_IOC_DELETE, &arg)?;
+    }
+    Ok(())
+}
+
+#[repr(C)]
+pub struct VnicIocDelete {
+    link_id: u32,
 }
 
 pub(crate) fn delete_vnic(id: u32) -> Result<(), Error> {
