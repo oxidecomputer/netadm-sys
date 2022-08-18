@@ -463,28 +463,22 @@ pub(crate) fn delete_link(id: u32, flags: LinkFlags) -> Result<(), Error> {
         Err(e) => return Err(e),
         Ok(link) => link,
     };
-    match link.class {
-        LinkClass::Simnet => {
-            match crate::ioctl::delete_simnet(id) {
-                Ok(_) => {}
-                Err(e) => warn!("{}", e),
-            }
-            Ok(delete_link_id(id, flags)?)
-        }
-        LinkClass::Vnic => {
-            match crate::ioctl::delete_vnic(id) {
-                Ok(_) => {}
-                Err(e) => warn!("{}", e),
-            }
-            Ok(delete_link_id(id, flags)?)
-        }
-        _ => {
-            warn!("link class {} delete not implemented", link.class);
-            Err(Error::NotImplemented)
-        }
+    if let Err(err) = match link.class {
+        LinkClass::Simnet => crate::ioctl::delete_simnet(id),
+        LinkClass::Vnic => crate::ioctl::delete_vnic(id),
+        _ => Err(Error::NotImplemented),
+    } {
+        warn!("class-specific delete error: {}", err);
+        return Err(err);
+    }
+
+    if let Err(e) = delete_link_id(id, flags) {
+        warn!("failed to delete link: {}", e);
+        return Err(e);
     }
 
     // TODO delete the persistent link
+    Ok(())
 }
 
 #[derive(Debug)]
