@@ -253,6 +253,7 @@ impl Default for strioctl {
 }
 
 pub const LIFNAMSIZ: usize = 32;
+pub const ND_MAX_HDW_LEN: usize = 64;
 
 pub const DLDIOC_MACADDRGET: ioc_t = DLDIOC!(0x15);
 pub const SIOCLIFREMOVEIF: ioc_t = IOW!('i', 110, lifreq) as ioc_t;
@@ -852,7 +853,8 @@ pub enum ndp_type {
 #[derive(Copy, Clone)]
 pub struct ndpr_entry {
     pub ndpre_ifname: [c_uchar; LIFNAMSIZ],
-    pub ndpre_l2_addr: [u8; 6],
+    pub ndpre_l2_addr: [u8; ND_MAX_HDW_LEN],
+    pub ndpre_l2_addr_length: u8,
     pub ndpre_l3_addr: in6_addr,
     pub ndpre_state: u16,
     pub ndpre_type: ndp_type,
@@ -862,7 +864,8 @@ impl Default for ndpr_entry {
     fn default() -> ndpr_entry {
         ndpr_entry {
             ndpre_ifname: [0; LIFNAMSIZ],
-            ndpre_l2_addr: [0; 6],
+            ndpre_l2_addr: [0; ND_MAX_HDW_LEN],
+            ndpre_l2_addr_length: 0,
             ndpre_l3_addr: libc::in6_addr { s6_addr: [0; 16] },
             ndpre_state: ND_UNCHANGED,
             ndpre_type: ndp_type::NDP_TYPE_OTHER,
