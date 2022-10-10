@@ -64,7 +64,7 @@ pub enum Error {
 // Datalink management --------------------------------------------------------
 
 /// Link flags specifiy if a link is active, persistent, or both.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum LinkFlags {
     Active = 0x1,
@@ -90,7 +90,7 @@ impl Display for LinkFlags {
 }
 
 /// Link class specifies the type of datalink.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Eq)]
 #[repr(C)]
 pub enum LinkClass {
     Phys = 0x01,
@@ -127,7 +127,7 @@ impl Display for LinkClass {
 }
 
 /// Link state indicates the carrier status of the link.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Eq)]
 pub enum LinkState {
     Unknown,
     Down,
@@ -151,7 +151,7 @@ impl Display for LinkState {
 }
 
 /// Information about a datalink.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Eq)]
 pub struct LinkInfo {
     pub id: u32,
     pub name: String,
@@ -272,7 +272,7 @@ pub fn connect_simnet_peers(
 // IP address management ------------------------------------------------------
 
 /// The state of an IP address in the kernel.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Eq)]
 #[repr(i32)]
 pub enum IpState {
     Disabled = 0,
@@ -284,7 +284,7 @@ pub enum IpState {
 }
 
 /// Information in the kernel about an IP address.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Eq)]
 pub struct IpInfo {
     pub ifname: String,
     pub index: i32,
