@@ -656,7 +656,7 @@ fn show_neighbors(_opts: &Opts, _s: &Show, _r: &ShowNeighbors) -> Result<()> {
         writeln!(
             &mut tw,
             "{}\t{}\t{}\t{}\t{}",
-            String::from_utf8_lossy(n.ndpre_ifname.as_slice()),
+            String::from_utf8_lossy(&n.ndpre_ifname),
             macf.blue(),
             color_ip(IpAddr::V6(std::net::Ipv6Addr::from(
                 n.ndpre_l3_addr.s6_addr
