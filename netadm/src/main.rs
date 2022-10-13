@@ -252,7 +252,15 @@ struct ShowAddrs {
 }
 
 #[derive(Parser)]
-struct ShowRoutes {}
+struct ShowRoutes {
+    /// Show only IPv6 routes
+    #[clap(short = '6')]
+    v6_only: bool,
+
+    /// Show only IPv4 routes
+    #[clap(short = '4')]
+    v4_only: bool,
+}
 
 fn main() {
     tracing_subscriber::fmt()
@@ -544,35 +552,63 @@ fn show_addrs(_opts: &Opts, _s: &Show, a: &ShowAddrs) -> Result<()> {
     Ok(())
 }
 
-fn show_routes(_opts: &Opts, _s: &Show, _r: &ShowRoutes) -> Result<()> {
-    let routes = route::get_routes()?;
+fn show_routes(_opts: &Opts, _s: &Show, sr: &ShowRoutes) -> Result<()> {
+    let mut routes = route::get_routes()?;
 
     let mut tw = TabWriter::new(stdout());
     writeln!(
         &mut tw,
-        "{}\t{}",
+        "{}\t{}\t{}",
         "Destination".dimmed(),
         "Gateway".dimmed(),
+        "Delay".dimmed(),
     )?;
     writeln!(
         &mut tw,
-        "{}\t{}",
+        "{}\t{}\t{}",
         "-----------".bright_black(),
         "-------".bright_black(),
+        "-----".bright_black(),
     )?;
 
-    for r in routes.iter() {
-        writeln!(
-            &mut tw,
-            "{}/{}\t{}",
-            color_ip(r.dest),
-            r.mask,
-            color_ip(r.gw),
-        )?;
+    routes.sort_by_key(|r| r.mask);
+
+    if !sr.v6_only {
+        routes
+            .iter()
+            .filter(|r| r.dest.is_ipv4())
+            .filter(|r| !r.dest.is_loopback())
+            .for_each(|r| show_route(&mut tw, r).unwrap());
+    }
+    if !sr.v4_only {
+        routes
+            .iter()
+            .filter(|r| r.dest.is_ipv6())
+            .filter(|r| !r.dest.is_loopback())
+            .for_each(|r| show_route(&mut tw, r).unwrap());
     }
 
     tw.flush()?;
 
+    Ok(())
+}
+
+fn show_route(
+    tw: &mut TabWriter<std::io::Stdout>,
+    r: &libnet::route::Route,
+) -> Result<()> {
+    writeln!(
+        tw,
+        "{}/{}\t{}\t{}",
+        color_ip(r.dest),
+        r.mask,
+        color_ip(r.gw),
+        if r.delay > 0 {
+            r.delay.to_string()
+        } else {
+            "-".dimmed().to_string()
+        },
+    )?;
     Ok(())
 }
 

@@ -1020,6 +1020,7 @@ pub const RTA_IFA: u32 = 0x20;
 pub const RTA_AUTHOR: u32 = 0x40;
 pub const RTA_BRD: u32 = 0x80;
 pub const RTA_SRC: u32 = 0x100;
+pub const RTA_DELAY: u32 = 0x200;
 
 pub const RTF_UP: u32 = 0x1; /* route usable */
 pub const RTF_GATEWAY: u32 = 0x2; /* destination is a gateway */

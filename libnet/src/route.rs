@@ -1,7 +1,10 @@
 // Copyright 2021 Oxide Computer Company
 
 use crate::{
-    sys::{self, rt_msghdr, RTA_DST, RTA_GATEWAY, RTA_NETMASK},
+    sys::{
+        self, rt_msghdr, RTA_AUTHOR, RTA_BRD, RTA_DELAY, RTA_DST, RTA_GATEWAY,
+        RTA_GENMASK, RTA_IFA, RTA_IFP, RTA_NETMASK, RTA_SRC,
+    },
     IpPrefix,
 };
 use std::mem::size_of;
@@ -36,6 +39,7 @@ pub struct Route {
     pub dest: IpAddr,
     pub mask: u32,
     pub gw: IpAddr,
+    pub delay: u32,
 }
 
 pub fn get_routes() -> Result<Vec<Route>, Error> {
@@ -50,7 +54,8 @@ pub fn get_routes() -> Result<Vec<Route>, Error> {
             )));
         }
 
-        let req = rt_msghdr::default();
+        let mut req = rt_msghdr::default();
+        req.addrs |= RTA_DELAY as i32;
 
         let mut n = write(
             sfd,
@@ -85,6 +90,45 @@ pub fn get_routes() -> Result<Vec<Route>, Error> {
                     (gw as *mut sockaddr_in6).offset(1) as *mut sockaddr
                 }
                 _ => continue,
+            };
+
+            /*
+            let delay = if ((*hdr).addrs & RTA_DELAY as i32) != 0 {
+                *(mask.offset(1) as *const u32)
+            } else {
+                0
+            };
+            */
+            //let delay = *(mask.offset(1) as *const u32);
+            let delay = if ((*hdr).addrs & RTA_DELAY as i32) != 0 {
+                match (*dst).sa_family as i32 {
+                    libc::AF_INET => 0,
+                    libc::AF_INET6 => {
+                        let mut off = 1;
+                        if ((*hdr).addrs as u32 & RTA_GENMASK) != 0 {
+                            off += 1;
+                        };
+                        if ((*hdr).addrs as u32 & RTA_IFP) != 0 {
+                            off += 1;
+                        };
+                        if ((*hdr).addrs as u32 & RTA_IFA) != 0 {
+                            off += 1;
+                        };
+                        if ((*hdr).addrs as u32 & RTA_AUTHOR) != 0 {
+                            off += 1;
+                        };
+                        if ((*hdr).addrs as u32 & RTA_BRD) != 0 {
+                            off += 1;
+                        };
+                        if ((*hdr).addrs as u32 & RTA_SRC) != 0 {
+                            off += 1;
+                        };
+                        *((mask as *mut sockaddr_in6).offset(off) as *const u32)
+                    }
+                    _ => continue,
+                }
+            } else {
+                0
             };
 
             let dest = match (*dst).sa_family as i32 {
@@ -151,7 +195,12 @@ pub fn get_routes() -> Result<Vec<Route>, Error> {
                 },
             };
 
-            result.push(Route { dest, mask, gw });
+            result.push(Route {
+                dest,
+                mask,
+                gw,
+                delay,
+            });
 
             p = (p as *mut u8).offset((*hdr).msglen as isize);
             if p.offset_from(buf.as_mut_ptr()) >= n as isize {
