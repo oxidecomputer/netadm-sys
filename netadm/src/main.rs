@@ -4,9 +4,9 @@ use anyhow::{anyhow, Result};
 use clap::{AppSettings, Parser};
 use colored::*;
 use libnet::{
-    self, add_route, create_ipaddr, create_simnet_link, create_vnic_link,
-    get_ipaddr_info, get_ipaddrs, get_link, get_links, ip, route,
-    sys::MAXMACADDRLEN, IpPrefix, IpState, LinkFlags, LinkHandle,
+    self, add_route, create_ipaddr, create_simnet_link, create_tfport_link,
+    create_vnic_link, get_ipaddr_info, get_ipaddrs, get_link, get_links, ip,
+    route, sys::MAXMACADDRLEN, IpPrefix, IpState, LinkFlags, LinkHandle,
 };
 use std::io::{stdout, Write};
 use std::net::IpAddr;
@@ -96,6 +96,8 @@ enum ShowSubCommand {
 enum CreateSubCommand {
     #[clap(about = "create a simnet interface")]
     Simnet(CreateSimnet),
+    #[clap(about = "create a tfport interface")]
+    Tfport(CreateTfport),
     #[clap(about = "create a vnic interface")]
     Vnic(CreateVnic),
     #[clap(about = "create an ip address")]
@@ -184,6 +186,18 @@ enum DeleteSubCommand {
 struct CreateSimnet {
     #[clap(about = "name for the new link")]
     name: String,
+}
+
+#[derive(Parser)]
+struct CreateTfport {
+    #[clap(about = "name for the new link")]
+    name: String,
+    #[clap(about = "tofino port")]
+    port: u16,
+    #[clap(about = "source of sidecar packets")]
+    over: String,
+    #[clap(about = "MAC address for the new link")]
+    mac: Option<String>,
 }
 
 #[derive(Parser)]
@@ -283,6 +297,12 @@ fn main() {
                     Err(e) => error!("{}", e),
                 }
             }
+            CreateSubCommand::Tfport(ref tfp) => {
+                match create_tfport(&opts, c, tfp) {
+                    Ok(()) => {}
+                    Err(e) => error!("{}", e),
+                }
+            }
             CreateSubCommand::Vnic(ref vnic) => {
                 match create_vnic(&opts, c, vnic) {
                     Ok(()) => {}
@@ -358,6 +378,13 @@ fn delete_addr(_opts: &Opts, _d: &Delete, a: &DeleteAddr) -> Result<()> {
 fn create_simnet(_opts: &Opts, _c: &Create, s: &CreateSimnet) -> Result<()> {
     create_simnet_link(&s.name, LinkFlags::Active)?;
     // should we print back?
+    Ok(())
+}
+
+fn create_tfport(_opts: &Opts, _c: &Create, s: &CreateTfport) -> Result<()> {
+    let mac = s.mac.as_ref().map(|m| m.to_string());
+
+    create_tfport_link(&s.name, &s.over, s.port, mac, LinkFlags::Active)?;
     Ok(())
 }
 

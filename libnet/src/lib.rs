@@ -104,7 +104,8 @@ pub enum LinkClass {
     Part = 0x100,
     Overlay = 0x200,
     Xde = 0x400,
-    All = 0x2ff,
+    Tfport = 0x800,
+    All = 0xfff,
 }
 
 impl Display for LinkClass {
@@ -121,6 +122,7 @@ impl Display for LinkClass {
             LinkClass::Part => write!(f, "part"),
             LinkClass::Xde => write!(f, "xde"),
             LinkClass::Overlay => write!(f, "overlay"),
+            LinkClass::Tfport => write!(f, "tfport"),
             LinkClass::All => write!(f, "all"),
         }
     }
@@ -218,7 +220,7 @@ pub fn linkname_to_id(name: &str) -> Result<u32, Error> {
 
 /// Create a simnet link.
 ///
-/// Simnet links are used in paris. When a pair of simnet links is created,
+/// Simnet links are used in pairs. When a pair of simnet links is created,
 /// whaterver ingreses into one flows to the other.
 pub fn create_simnet_link(
     name: &str,
@@ -226,6 +228,68 @@ pub fn create_simnet_link(
 ) -> Result<LinkInfo, Error> {
     debug!("creating simnet link {}", name);
     crate::link::create_simnet_link(name, flags)
+}
+
+/// Create a tfport link.
+///
+/// Each tfport link is layered on top of a mac device and is associated with
+/// a 16-bit port number.  When the tfport driver receives a packet with a
+/// "sidecar" header attached, it uses the port in that header to forward the
+/// packet to the link associated with that port.  Packets that are transmitted
+/// through a tfport will have a sidecar header prepended by the tfport driver
+/// before forwarding them to the underlying mac device.
+pub fn create_tfport_link(
+    name: &str,
+    over: &str,
+    port: u16,
+    mac: Option<String>,
+    flags: LinkFlags,
+) -> Result<LinkInfo, Error> {
+    debug!("creating tfport link {}", name);
+    crate::link::create_tfport_link(name, over, port, mac, flags)
+}
+
+/// Information about a single tfport link
+pub struct TfportInfo {
+    pub name: String,
+    pub pkt_src: String,
+    pub port: u16,
+    pub mac: String,
+}
+
+/// Given the LinkHandle for a tfport, return the details of the link.
+pub fn get_tfport_info(link: &LinkHandle) -> Result<TfportInfo, Error> {
+    let link = get_link(link)?;
+    if link.class != LinkClass::Tfport {
+        return Err(Error::BadArgument(format!(
+            "{} is not a tfport",
+            link.name
+        )));
+    }
+
+    let info = crate::ioctl::get_tfport_info(link.id).map_err(|_| {
+        Error::Ioctl(format!("failed to get link details for {}", link.name))
+    })?;
+
+    let pkt_src = match crate::link::get_link(info.pktsrc_id) {
+        Ok(l) => l.name,
+        Err(_) => "unknown".to_string(),
+    };
+
+    let mac = {
+        let m = &info.mac_addr;
+        format!(
+            "{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+            m[0], m[1], m[2], m[3], m[4], m[5]
+        )
+    };
+
+    Ok(TfportInfo {
+        name: link.name,
+        pkt_src,
+        port: info.port,
+        mac,
+    })
 }
 
 /// Create a virtual NIC link.
