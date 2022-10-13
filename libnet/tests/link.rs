@@ -119,7 +119,7 @@ fn test_vnic_lifecycle() -> Result<()> {
         .into();
 
     // create vnic
-    let vnic0: DropLink = create_vnic_link(name, &sim0.handle(), flags)
+    let vnic0: DropLink = create_vnic_link(name, &sim0.handle(), None, flags)
         .expect("create vnic")
         .into();
 
