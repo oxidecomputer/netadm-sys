@@ -885,7 +885,7 @@ impl Default for ndpr_entry {
     }
 }
 
-#[repr(C)]
+#[repr(packed)]
 #[derive(Copy, Clone)]
 pub struct ndpreq {
     pub ndpr_count: u32,
