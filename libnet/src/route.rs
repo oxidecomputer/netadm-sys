@@ -1,5 +1,49 @@
 // Copyright 2021 Oxide Computer Company
 
+//!
+//! This file contains machinery for interacting with the illumos router socket.
+//! This socket has the address family AF_ROUTE. Packets exchanged over an
+//! AF_ROUTE socket have a special header described by `[sys::rt_msghdr]`.
+//!
+//! The structure of an AF_ROUTE message is the following.
+//!
+//! ```text
+//! rt_msghdr: 74 bytes
+//! route_addr_element_1: N bytes
+//! route_addr_element_2: N bytes
+//! ...
+//! route_addr_element_N: N bytes
+//! ```
+//!
+//! In the rt_msghdr there is a field `addrs` which is a bitmask that identifies
+//! what address elements are present in the message. Members of this bitfield
+//! are constants with the name format `RTA_<address name>`. These include
+//!
+//! ```text
+//! RTA_DST =       1
+//! RTA_GATEWAY =   (1<<1)
+//! RTA_NETMASK =   (1<<2)
+//! RTA_GENMASK =   (1<<3)
+//! RTA_IFP =       (1<<4)
+//! RTA_IFA =       (1<<5)
+//! RTA_AUTHOR =    (1<<6)
+//! RTA_BRD =       (1<<7)
+//! RTA_SRC =       (1<<8)
+//! RTA_DELAY =     (1<<9)
+//! ```
+//!
+//! Address elements always appear in the order they are defined in the bitmask.
+//! For example, a message containing RTA_DST RTA_GENMASK and RTA_AUTHOR will
+//! always be structured as
+//!
+//! ```text
+//! t_msghdr
+//! TA_DST
+//! TA_GENMASK
+//! TA_AUTHOR
+//! ```
+//!
+
 use crate::{
     sys::{
         self, rt_msghdr, RTA_AUTHOR, RTA_BRD, RTA_DELAY, RTA_DST, RTA_GATEWAY,
@@ -7,16 +51,16 @@ use crate::{
     },
     IpPrefix,
 };
+use std::io::{Read, Write};
 use std::mem::size_of;
 use std::slice::from_raw_parts;
 
-use libc::{
-    close, read, sockaddr, sockaddr_in, sockaddr_in6, socket, write, AF_INET,
-    AF_INET6, AF_ROUTE, AF_UNSPEC, SOCK_RAW,
-};
+use libc::{sockaddr, sockaddr_in, sockaddr_in6, AF_INET, AF_INET6, AF_ROUTE};
 
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-use std::os::raw::c_void;
+use socket2::{Domain, Socket, Type};
+use std::net::{
+    IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6,
+};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -33,8 +77,11 @@ pub enum Error {
     InsufficientResources,
     #[error("insufficient permissions")]
     InsufficientPermissions,
+    #[error("io error {0}")]
+    IoError(#[from] std::io::Error),
 }
 
+#[derive(Debug)]
 pub struct Route {
     pub dest: IpAddr,
     pub mask: u32,
@@ -42,173 +89,148 @@ pub struct Route {
     pub delay: u32,
 }
 
+#[derive(Default)]
+pub struct RtMsg {
+    pub dst: Option<SocketAddr>,
+    pub gw: Option<SocketAddr>,
+    pub mask: Option<SocketAddr>,
+    pub genmask: Option<SocketAddr>,
+    pub ifp: Option<SocketAddr>,
+    pub ifa: Option<SocketAddr>,
+    pub author: Option<SocketAddr>,
+    pub brd: Option<SocketAddr>,
+    pub src: Option<SocketAddr>,
+}
+
+unsafe fn read_msg(buf: &[u8]) -> (RtMsg, &[u8]) {
+    let hdr = buf.as_ptr() as *const rt_msghdr;
+    let buf = &buf[std::mem::size_of::<rt_msghdr>()..];
+
+    let (dst, buf) = get_addr_element(hdr, buf, RTA_DST as i32);
+    let (gw, buf) = get_addr_element(hdr, buf, RTA_GATEWAY as i32);
+    let (mask, buf) = get_addr_element(hdr, buf, RTA_NETMASK as i32);
+    let (genmask, buf) = get_addr_element(hdr, buf, RTA_GENMASK as i32);
+    let (ifp, buf) = get_addr_element(hdr, buf, RTA_IFP as i32);
+    let (ifa, buf) = get_addr_element(hdr, buf, RTA_IFA as i32);
+    let (author, buf) = get_addr_element(hdr, buf, RTA_AUTHOR as i32);
+    let (brd, buf) = get_addr_element(hdr, buf, RTA_BRD as i32);
+    let (src, buf) = get_addr_element(hdr, buf, RTA_SRC as i32);
+
+    (
+        RtMsg {
+            dst,
+            gw,
+            mask,
+            genmask,
+            ifp,
+            ifa,
+            author,
+            brd,
+            src,
+        },
+        buf,
+    )
+}
+
+unsafe fn get_addr_element(
+    hdr: *const rt_msghdr,
+    buf: &[u8],
+    rta: i32,
+) -> (Option<SocketAddr>, &[u8]) {
+    if ((*hdr).addrs & rta) == 0 {
+        return (None, buf);
+    }
+
+    let dst = buf.as_ptr() as *mut sockaddr;
+    match (*dst).sa_family as i32 {
+        libc::AF_INET => {
+            let dst = dst as *const sockaddr_in;
+            let off = std::mem::size_of::<sockaddr_in>();
+            (
+                Some(
+                    SocketAddrV4::new(
+                        Ipv4Addr::from((*dst).sin_addr.s_addr.to_be()),
+                        (*dst).sin_port,
+                    )
+                    .into(),
+                ),
+                &buf[off..],
+            )
+        }
+        libc::AF_INET6 => {
+            let dst = dst as *const sockaddr_in6;
+            let off = std::mem::size_of::<sockaddr_in6>();
+            (
+                Some(
+                    SocketAddrV6::new(
+                        Ipv6Addr::from((*dst).sin6_addr.s6_addr),
+                        (*dst).sin6_port,
+                        (*dst).sin6_flowinfo,
+                        (*dst).sin6_scope_id,
+                    )
+                    .into(),
+                ),
+                &buf[off..],
+            )
+        }
+        _ => (None, buf),
+    }
+}
+
 pub fn get_routes() -> Result<Vec<Route>, Error> {
+    let mut sock = Socket::new(Domain::from(AF_ROUTE), Type::RAW, None)?;
+
+    let mut req = rt_msghdr::default();
+    req.addrs |= RTA_DELAY as i32;
+    let req_data = unsafe {
+        std::slice::from_raw_parts(
+            (&req as *const rt_msghdr) as *const u8,
+            std::mem::size_of::<rt_msghdr>(),
+        )
+    };
+    let n = sock.write(req_data)?;
+    if n < std::mem::size_of::<rt_msghdr>() {
+        return Err(Error::SystemError(format!(
+            "get routes: short write: {} < {}",
+            n,
+            std::mem::size_of::<rt_msghdr>(),
+        )));
+    }
+
+    let mut buf: [u8; 10240] = [0; 10240];
+    let n = sock.read(&mut buf)?;
+    let mut buf = &buf[..n];
+
     let mut result = Vec::new();
-
-    unsafe {
-        let sfd = socket(AF_ROUTE as i32, SOCK_RAW as i32, AF_UNSPEC as i32);
-        if sfd < 0 {
-            return Err(Error::SystemError(format!(
-                "socket: {}",
-                sys::errno()
-            )));
+    loop {
+        if buf.len() < std::mem::size_of::<rt_msghdr>() {
+            break;
         }
+        let (msg, b) = unsafe { read_msg(buf) };
+        buf = b;
+        let dest = match msg.dst {
+            Some(d) => d.ip(),
+            None => continue,
+        };
+        let mask = match msg.mask {
+            Some(m) => match m {
+                SocketAddr::V4(s) => u32::from(*s.ip()).leading_ones(),
+                SocketAddr::V6(s) => u128::from(*s.ip()).leading_ones(),
+            },
+            None => continue,
+        };
+        let gw = match msg.gw {
+            Some(d) => d.ip(),
+            None => continue,
+        };
 
-        let mut req = rt_msghdr::default();
-        req.addrs |= RTA_DELAY as i32;
-
-        let mut n = write(
-            sfd,
-            (&req as *const rt_msghdr) as *const c_void,
-            req.msglen as usize,
-        );
-        if n <= 0 {
-            return Err(Error::SystemError(format!(
-                "write: {} {}",
-                n,
-                sys::errno()
-            )));
-        }
-
-        let mut buf: [u8; 10240] = [0; 10240];
-        let mut p = buf.as_mut_ptr();
-
-        n = read(sfd, buf.as_mut_ptr() as *mut c_void, 10240);
-        loop {
-            let hdr = p as *mut rt_msghdr;
-            let dst = hdr.offset(1) as *mut sockaddr;
-            let gw = match (*dst).sa_family as i32 {
-                libc::AF_INET => dst.offset(1) as *mut sockaddr,
-                libc::AF_INET6 => {
-                    (dst as *mut sockaddr_in6).offset(1) as *mut sockaddr
-                }
-                _ => continue,
-            };
-            let mask = match (*dst).sa_family as i32 {
-                libc::AF_INET => gw.offset(1) as *mut sockaddr,
-                libc::AF_INET6 => {
-                    (gw as *mut sockaddr_in6).offset(1) as *mut sockaddr
-                }
-                _ => continue,
-            };
-
-            /*
-            let delay = if ((*hdr).addrs & RTA_DELAY as i32) != 0 {
-                *(mask.offset(1) as *const u32)
-            } else {
-                0
-            };
-            */
-            //let delay = *(mask.offset(1) as *const u32);
-            let delay = if ((*hdr).addrs & RTA_DELAY as i32) != 0 {
-                match (*dst).sa_family as i32 {
-                    libc::AF_INET => 0,
-                    libc::AF_INET6 => {
-                        let mut off = 1;
-                        if ((*hdr).addrs as u32 & RTA_GENMASK) != 0 {
-                            off += 1;
-                        };
-                        if ((*hdr).addrs as u32 & RTA_IFP) != 0 {
-                            off += 1;
-                        };
-                        if ((*hdr).addrs as u32 & RTA_IFA) != 0 {
-                            off += 1;
-                        };
-                        if ((*hdr).addrs as u32 & RTA_AUTHOR) != 0 {
-                            off += 1;
-                        };
-                        if ((*hdr).addrs as u32 & RTA_BRD) != 0 {
-                            off += 1;
-                        };
-                        if ((*hdr).addrs as u32 & RTA_SRC) != 0 {
-                            off += 1;
-                        };
-                        *((mask as *mut sockaddr_in6).offset(off) as *const u32)
-                    }
-                    _ => continue,
-                }
-            } else {
-                0
-            };
-
-            let dest = match (*dst).sa_family as i32 {
-                libc::AF_INET => {
-                    let dst = dst as *mut sockaddr_in;
-                    IpAddr::V4(Ipv4Addr::from(u32::from_be(
-                        (*dst).sin_addr.s_addr,
-                    )))
-                }
-                libc::AF_INET6 => {
-                    let dst = dst as *mut sockaddr_in6;
-                    IpAddr::V6(Ipv6Addr::from(u128::from_be_bytes(
-                        (*dst).sin6_addr.s6_addr,
-                    )))
-                }
-                _ => {
-                    p = (p as *mut u8).offset((*hdr).msglen as isize);
-                    if p.offset_from(buf.as_mut_ptr()) >= n as isize {
-                        break;
-                    }
-                    continue;
-                }
-            };
-
-            let mask = match (*mask).sa_family as i32 {
-                libc::AF_INET => {
-                    let mask = mask as *mut sockaddr_in;
-                    u32::leading_ones(u32::from_be((*mask).sin_addr.s_addr))
-                }
-                libc::AF_INET6 => {
-                    let mask = mask as *mut sockaddr_in6;
-                    u128::leading_ones(u128::from_be_bytes(
-                        (*mask).sin6_addr.s6_addr,
-                    ))
-                }
-                _ => 0,
-            };
-
-            let gw = match (*gw).sa_family as i32 {
-                libc::AF_INET => {
-                    let gw = gw as *mut sockaddr_in;
-                    IpAddr::V4(Ipv4Addr::from(u32::from_be(
-                        (*gw).sin_addr.s_addr,
-                    )))
-                }
-                libc::AF_INET6 => {
-                    let gw = gw as *mut sockaddr_in6;
-                    IpAddr::V6(Ipv6Addr::from(u128::from_be_bytes(
-                        (*gw).sin6_addr.s6_addr,
-                    )))
-                }
-                _ => match (*dst).sa_family as i32 {
-                    libc::AF_INET => IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-                    libc::AF_INET6 => {
-                        IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0))
-                    }
-                    _ => {
-                        p = (p as *mut u8).offset((*hdr).msglen as isize);
-                        if p.offset_from(buf.as_mut_ptr()) >= n as isize {
-                            break;
-                        }
-                        continue;
-                    }
-                },
-            };
-
-            result.push(Route {
-                dest,
-                mask,
-                gw,
-                delay,
-            });
-
-            p = (p as *mut u8).offset((*hdr).msglen as isize);
-            if p.offset_from(buf.as_mut_ptr()) >= n as isize {
-                break;
-            }
-        }
-
-        close(sfd);
+        let r = Route {
+            dest,
+            mask,
+            gw,
+            delay: 0,
+        };
+        result.push(r);
     }
 
     Ok(result)
@@ -248,106 +270,87 @@ fn mod_route(
     gateway: IpAddr,
     cmd: u8,
 ) -> Result<(), Error> {
-    unsafe {
-        let sfd = socket(AF_ROUTE as i32, SOCK_RAW as i32, AF_UNSPEC as i32);
-        if sfd < 0 {
-            return Err(Error::SystemError(format!(
-                "socket: {}",
-                sys::errno()
-            )));
+    let mut sock = Socket::new(Domain::from(AF_ROUTE), Type::RAW, None)?;
+    let mut msglen = size_of::<rt_msghdr>();
+    match destination {
+        IpPrefix::V4(_) => {
+            msglen += size_of::<sockaddr_in>() * 2;
         }
+        IpPrefix::V6(_) => {
+            msglen += size_of::<sockaddr_in6>() * 2;
+        }
+    };
+    match gateway {
+        IpAddr::V4(_) => {
+            msglen += size_of::<sockaddr_in>();
+        }
+        IpAddr::V6(_) => {
+            msglen += size_of::<sockaddr_in6>();
+        }
+    };
 
-        let mut msglen = size_of::<rt_msghdr>();
-        match destination {
-            IpPrefix::V4(_) => {
-                msglen += size_of::<sockaddr_in>() * 2;
-            }
-            IpPrefix::V6(_) => {
-                msglen += size_of::<sockaddr_in6>() * 2;
-            }
-        };
-        match gateway {
-            IpAddr::V4(_) => {
-                msglen += size_of::<sockaddr_in>();
-            }
-            IpAddr::V6(_) => {
-                msglen += size_of::<sockaddr_in6>();
-            }
-        };
+    let req = rt_msghdr {
+        typ: cmd,
+        msglen: msglen as u16,
+        version: sys::RTM_VERSION as u8,
+        addrs: (RTA_DST | RTA_GATEWAY | RTA_NETMASK) as i32,
+        pid: std::process::id() as i32,
 
-        let req = rt_msghdr {
-            typ: cmd,
-            msglen: msglen as u16,
-            version: sys::RTM_VERSION as u8,
-            addrs: (RTA_DST | RTA_GATEWAY | RTA_NETMASK) as i32,
-            pid: std::process::id() as i32,
+        //TODO
+        seq: 47,
 
-            //TODO
-            seq: 47,
+        //TODO more?
+        // set bitmask identifying addresses in message
+        flags: (sys::RTF_GATEWAY | sys::RTF_STATIC) as i32,
 
-            //TODO more?
-            // set bitmask identifying addresses in message
-            flags: (sys::RTF_GATEWAY | sys::RTF_STATIC) as i32,
+        ..Default::default()
+    };
 
-            ..Default::default()
-        };
-
-        let mut buf: Vec<u8> = Vec::new();
-        buf.extend_from_slice(from_raw_parts(
+    let mut buf: Vec<u8> = Vec::new();
+    buf.extend_from_slice(unsafe {
+        from_raw_parts(
             (&req as *const rt_msghdr) as *const u8,
             size_of::<rt_msghdr>(),
-        ));
+        )
+    });
 
-        match destination {
-            IpPrefix::V4(p) => {
-                let sa = sockaddr_in {
-                    sin_family: AF_INET as u16,
-                    sin_port: 0,
-                    sin_addr: libc::in_addr {
-                        s_addr: u32::from(p.addr).to_be(),
-                    },
-                    sin_zero: [0; 8],
-                };
-                buf.extend_from_slice(from_raw_parts(
+    serialize_addr(&mut buf, destination.ip());
+    serialize_addr(&mut buf, gateway);
+    serialize_addr(&mut buf, destination.mask_as_addr());
+
+    let n = sock.write(&buf)?;
+    if n < buf.len() {
+        return Err(Error::SystemError(format!(
+            "short write: {} < {}",
+            n,
+            buf.len()
+        )));
+    }
+
+    Ok(())
+}
+
+fn serialize_addr(buf: &mut Vec<u8>, a: IpAddr) {
+    match a {
+        IpAddr::V4(a) => {
+            let sa = sockaddr_in {
+                sin_family: AF_INET as u16,
+                sin_port: 0,
+                sin_addr: libc::in_addr {
+                    s_addr: u32::from(a).to_be(),
+                },
+                sin_zero: [0; 8],
+            };
+            buf.extend_from_slice(unsafe {
+                from_raw_parts(
                     (&sa as *const sockaddr_in) as *const u8,
                     size_of::<sockaddr_in>(),
-                ));
-            }
-            IpPrefix::V6(p) => {
-                let sa = sockaddr_in6 {
-                    sin6_family: AF_INET6 as u16,
-                    sin6_port: 0,
-                    sin6_flowinfo: 0,
-                    sin6_addr: libc::in6_addr {
-                        s6_addr: p.addr.octets(),
-                    },
-                    sin6_scope_id: 0,
-                    ..std::mem::zeroed()
-                };
-                buf.extend_from_slice(from_raw_parts(
-                    (&sa as *const sockaddr_in6) as *const u8,
-                    size_of::<sockaddr_in6>(),
-                ));
-            }
-        };
-
-        match gateway {
-            IpAddr::V4(a) => {
-                let sa = sockaddr_in {
-                    sin_family: AF_INET as u16,
-                    sin_port: 0,
-                    sin_addr: libc::in_addr {
-                        s_addr: u32::from(a).to_be(),
-                    },
-                    sin_zero: [0; 8],
-                };
-                buf.extend_from_slice(from_raw_parts(
-                    (&sa as *const sockaddr_in) as *const u8,
-                    size_of::<sockaddr_in>(),
-                ));
-            }
-            IpAddr::V6(a) => {
-                let sa = sockaddr_in6 {
+                )
+            });
+        }
+        IpAddr::V6(a) => {
+            let sa = unsafe {
+                sockaddr_in6 {
                     sin6_family: AF_INET6 as u16,
                     sin6_port: 0,
                     sin6_flowinfo: 0,
@@ -356,66 +359,14 @@ fn mod_route(
                     },
                     sin6_scope_id: 0,
                     ..std::mem::zeroed()
-                };
-                buf.extend_from_slice(from_raw_parts(
+                }
+            };
+            buf.extend_from_slice(unsafe {
+                from_raw_parts(
                     (&sa as *const sockaddr_in6) as *const u8,
                     size_of::<sockaddr_in6>(),
-                ));
-            }
-        };
-
-        match destination {
-            IpPrefix::V4(p) => {
-                let mut mask: u32 = 0;
-                for i in 0..p.mask {
-                    mask |= 1 << i;
-                }
-                let sa = sockaddr_in {
-                    sin_family: AF_INET as u16,
-                    sin_port: 0,
-                    sin_addr: libc::in_addr { s_addr: mask },
-                    sin_zero: [0; 8],
-                };
-                buf.extend_from_slice(from_raw_parts(
-                    (&sa as *const sockaddr_in) as *const u8,
-                    size_of::<sockaddr_in>(),
-                ));
-            }
-            IpPrefix::V6(p) => {
-                let mut mask: u128 = 0;
-                for i in 0..p.mask {
-                    mask |= 1 << i;
-                }
-                let sa = sockaddr_in6 {
-                    sin6_family: AF_INET6 as u16,
-                    sin6_port: 0,
-                    sin6_flowinfo: 0,
-                    sin6_addr: libc::in6_addr {
-                        s6_addr: mask.to_be().to_be_bytes(),
-                    },
-                    sin6_scope_id: 0,
-                    ..std::mem::zeroed()
-                };
-                buf.extend_from_slice(from_raw_parts(
-                    (&sa as *const sockaddr_in6) as *const u8,
-                    size_of::<sockaddr_in6>(),
-                ));
-            }
-        };
-
-        sys::clear_errno();
-        let n = write(sfd, buf.as_ptr() as *const c_void, buf.len());
-        if sys::errno() != 0 {
-            return Err(Error::SystemError(sys::errno_string()));
+                )
+            });
         }
-        if n < buf.len() as isize {
-            return Err(Error::SystemError(format!(
-                "short write: {} < {}",
-                n,
-                buf.len()
-            )));
-        }
-    }
-
-    Ok(())
+    };
 }
