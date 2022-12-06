@@ -11,9 +11,11 @@ use libc::{free, malloc};
 use libc::{
     sockaddr_in, sockaddr_in6, sockaddr_storage, AF_INET, AF_INET6, AF_UNSPEC,
 };
+use num_enum::TryFromPrimitive;
 use rusty_doors::{door_call_slice, door_callp};
 use socket2::{Domain, Socket, Type};
 use std::collections::BTreeMap;
+use std::convert::TryFrom;
 use std::ffi::CStr;
 use std::fs::File;
 use std::mem::size_of;
@@ -1577,4 +1579,67 @@ pub(crate) fn delete_vnic(id: u32) -> Result<(), Error> {
         rioctl!(fd.as_raw_fd(), sys::VNIC_IOC_DELETE, &arg)?;
     }
     Ok(())
+}
+
+#[derive(Debug)]
+pub struct Neighbor {
+    pub state: NeighborState,
+    pub l2_addr: Vec<i8>,
+    pub flags: i32,
+}
+
+impl Neighbor {
+    pub fn is_router(&self) -> bool {
+        (self.flags & sys::NDF_ISROUTER_ON) != 0
+    }
+    pub fn is_anycast(&self) -> bool {
+        (self.flags & sys::NDF_ANYCAST_ON) != 0
+    }
+    pub fn is_proxy(&self) -> bool {
+        (self.flags & sys::NDF_PROXY_ON) != 0
+    }
+    pub fn is_static(&self) -> bool {
+        (self.flags & sys::NDF_STATIC) != 0
+    }
+}
+
+#[derive(TryFromPrimitive, Debug)]
+#[repr(u8)]
+pub enum NeighborState {
+    Unchanged,
+    Incomplete,
+    Reachable,
+    Stale,
+    Delay,
+    Probe,
+    Unreachable,
+}
+
+pub fn get_neighbor(ifname: &str, addr: Ipv6Addr) -> Result<Neighbor, Error> {
+    let mut ior: sys::lifreq = unsafe { std::mem::zeroed() };
+    let mut lifru_nd_req: sys::lif_nd_req = unsafe { std::mem::zeroed() };
+    for (i, b) in ifname.bytes().enumerate() {
+        ior.lifr_name[i] = b as i8;
+    }
+
+    let sin6 = &mut lifru_nd_req.lnr_addr as *mut sockaddr_storage
+        as *mut sockaddr_in6;
+    unsafe {
+        (*sin6).sin6_family = AF_INET6 as u16;
+        (*sin6).sin6_addr.s6_addr = addr.octets();
+    }
+
+    ior.lifr_lifru = sys::lifreq_ru { lifru_nd_req };
+
+    let sock = Socket::new(Domain::IPV6, Type::DGRAM, None)?;
+
+    unsafe { rioctl!(sock, sys::SIOCLIFGETND, &ior)? };
+
+    Ok(Neighbor {
+        state: NeighborState::try_from(unsafe {
+            ior.lifr_lifru.lifru_nd_req.lnr_state_create
+        })?,
+        l2_addr: unsafe { ior.lifr_lifru.lifru_nd_req.lnr_hdw_addr.to_vec() },
+        flags: unsafe { ior.lifr_lifru.lifru_nd_req.lnr_flags },
+    })
 }

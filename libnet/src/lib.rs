@@ -1,6 +1,7 @@
 // Copyright 2021 Oxide Computer Company
 
 use colored::*;
+use num_enum::TryFromPrimitiveError;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::net::IpAddr;
@@ -59,6 +60,8 @@ pub enum Error {
     Route(#[from] route::Error),
     #[error("ndp error: {0}")]
     Ndp(String),
+    #[error("unrecognized neighbor state: {0}")]
+    NeighborState(#[from] TryFromPrimitiveError<ioctl::NeighborState>),
 }
 
 // Datalink management --------------------------------------------------------
@@ -384,6 +387,9 @@ pub fn get_ipaddrs() -> Result<BTreeMap<String, Vec<IpInfo>>, Error> {
 
 /// Get information about a specific IP interface
 pub use crate::ioctl::get_ipaddr_info;
+
+/// Get neighbor information for a particular IP address.
+pub use crate::ioctl::get_neighbor;
 
 /// Create an IP address and give it the provided address object name.
 ///

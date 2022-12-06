@@ -9,7 +9,7 @@ use libnet::{
     route, IpPrefix, IpState, LinkFlags, LinkHandle,
 };
 use std::io::{stdout, Write};
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv6Addr};
 use std::str;
 use tabwriter::TabWriter;
 use tracing::error;
@@ -88,6 +88,8 @@ enum ShowSubCommand {
     Addrs(ShowAddrs),
     #[clap(about = "show routes")]
     Routes(ShowRoutes),
+    #[clap(about = "show neighbor")]
+    Neighbor(ShowNeighbor),
 }
 
 #[derive(Parser)]
@@ -262,6 +264,14 @@ struct ShowRoutes {
     v4_only: bool,
 }
 
+#[derive(Parser)]
+struct ShowNeighbor {
+    /// Name of the interface
+    ifname: String,
+    /// IPv6 address to show neighbor for
+    addr: Ipv6Addr,
+}
+
 fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -281,6 +291,11 @@ fn main() {
                 Err(e) => error!("{}", e),
             },
             ShowSubCommand::Routes(ref r) => match show_routes(&opts, s, r) {
+                Ok(()) => {}
+                Err(e) => error!("{}", e),
+            },
+            ShowSubCommand::Neighbor(ref n) => match show_neighbor(&opts, s, n)
+            {
                 Ok(()) => {}
                 Err(e) => error!("{}", e),
             },
@@ -589,6 +604,32 @@ fn show_routes(_opts: &Opts, _s: &Show, sr: &ShowRoutes) -> Result<()> {
     }
 
     tw.flush()?;
+
+    Ok(())
+}
+
+fn show_neighbor(_opts: &Opts, _s: &Show, sn: &ShowNeighbor) -> Result<()> {
+    let nbr = libnet::get_neighbor(&sn.ifname, sn.addr)?;
+
+    let mut flags = String::new();
+    if nbr.is_router() {
+        flags += "router";
+    }
+    if nbr.is_anycast() {
+        flags += "anycast";
+    }
+    if nbr.is_proxy() {
+        flags += "proxy";
+    }
+    if nbr.is_static() {
+        flags += "static";
+    }
+
+    let m = &nbr.l2_addr;
+    println!(
+        "{:x}:{:x}:{:x}:{:x}:{:x}:{:x} {}",
+        m[0], m[1], m[2], m[3], m[4], m[5], flags,
+    );
 
     Ok(())
 }

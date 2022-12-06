@@ -262,6 +262,7 @@ pub const SIOCSLIFNETMASK: ioc_t = IOW!('i', 126, lifreq) as ioc_t;
 pub const SIOCSLIFNAME: ioc_t = IOWR!('i', 129, lifreq) as ioc_t;
 pub const SIOCGLIFNUM: ioc_t = IOWR!('i', 130, lifnum) as ioc_t;
 pub const SIOCGLIFINDEX: ioc_t = IOWR!('i', 133, lifreq) as ioc_t;
+pub const SIOCLIFGETND: ioc_t = IOWR!('i', 142, lifreq) as ioc_t;
 pub const SIOCGLIFCONF: ioc_t = IOWRN!('i', 165, 16) as ioc_t;
 pub const SIOCGLIFDADSTATE: ioc_t = IOWR!('i', 190, lifreq) as ioc_t;
 pub const SIOCSLIFPREFIX: ioc_t = IOWR!('i', 191, lifreq) as ioc_t;
@@ -1091,3 +1092,11 @@ pub enum IpadmStatusT {
     Ebade,              /* Invalid data exchange with ipmgmtd */
     GzPerm,             /* Operation not permitted on from-gz intf */
 }
+
+pub const NDF_ISROUTER_ON: i32 = 0x1;
+pub const NDF_ISROUTER_off: i32 = 0x2;
+pub const NDF_ANYCAST_ON: i32 = 0x4;
+pub const NDF_ANYCAST_OFF: i32 = 0x8;
+pub const NDF_PROXY_ON: i32 = 0x10;
+pub const NDF_PROXY_OFF: i32 = 0x20;
+pub const NDF_STATIC: i32 = 0x40;

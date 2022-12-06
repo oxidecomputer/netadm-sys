@@ -20,3 +20,4 @@ nvpair-sys = { git = "https://github.com/jmesmon/rust-libzfs", branch = "master"
 
 dlpi = { git = "https://github.com/oxidecomputer/dlpi-sys" }
 rusty-doors = { git = "https://github.com/oxidecomputer/rusty-doors" }
+num_enum = "0.5.7"
