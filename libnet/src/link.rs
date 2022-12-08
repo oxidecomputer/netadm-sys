@@ -460,6 +460,7 @@ pub fn create_vnic_link(
     Ok(link_info)
 }
 
+#[repr(C)]
 pub struct DlmgmtGetLinkId {
     pub cmd: DlmgmtCmd,
     pub name: [u8; crate::sys::MAXLINKNAMELEN as usize],
