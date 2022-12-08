@@ -25,26 +25,22 @@ use tracing::{debug, warn};
 
 macro_rules! ioctl {
     ( $fd:expr, $req:expr, $($args:expr),* ) => {{
-        $(
-            match libc::ioctl($fd, $req, $args) {
-                -1 => Err(Error::Ioctl(format!(
-                    "ioctl @{}={} {}: {}",
-                    stringify!($fd), $fd,
-                    stringify!($req),
-                    std::io::Error::last_os_error(),
-                ))),
-                x => Ok(x)
-            }
-        )*
+        match libc::ioctl($fd, $req, $($args),*) {
+            -1 => Err(Error::Ioctl(format!(
+                "ioctl @{}={} {}: {}",
+                stringify!($fd), $fd,
+                stringify!($req),
+                std::io::Error::last_os_error(),
+            ))),
+            x => Ok(x)
+        }
     }}
 }
 
 // "rusty" ioctl where the first argument implements std::os::unix::io::AsRawFd
 macro_rules! rioctl {
     ( $fd:expr, $req:expr, $($args:expr),* ) => {{
-        $(
-            ioctl!($fd.as_raw_fd(), $req, $args)
-        )*
+        ioctl!($fd.as_raw_fd(), $req, $($args),*)
     }}
 }
 
