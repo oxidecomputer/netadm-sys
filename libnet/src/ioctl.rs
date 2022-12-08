@@ -3,7 +3,8 @@
 use crate::ip::{self, addrobjname_to_addrobj};
 use crate::ndpd::disable_autoconf;
 use crate::sys::{
-    self, dld_ioc_macaddrget_t, dld_macaddrinfo_t, DLDIOC_MACADDRGET,
+    self, dld_ioc_macaddrget_t, dld_ioc_macprop_t, dld_macaddrinfo_t,
+    mac_prop_id_t_MAC_PROP_MTU, DLDIOC_GETMACPROP, DLDIOC_MACADDRGET,
     SIMNET_IOC_INFO, SIMNET_IOC_MODIFY,
 };
 use crate::{Error, IpInfo, IpPrefix, IpState, LinkFlags};
@@ -408,6 +409,27 @@ pub(crate) fn get_macaddr(linkid: u32) -> Result<[u8; 6], Error> {
 
         Ok(res)
     }
+}
+
+pub(crate) fn get_mtu(linkid: u32) -> Result<u32, Error> {
+    let fd = dld_fd()?;
+
+    let mut arg = dld_ioc_macprop_t::<u32> {
+        pr_flags: 0,
+        pr_linkid: linkid,
+        pr_num: mac_prop_id_t_MAC_PROP_MTU,
+        pr_perm_flags: 0,
+        pr_name: [0; 256],
+        pr_valsize: size_of::<u32>() as u32,
+        pr_val: 0,
+    };
+    arg.pr_name[..3].copy_from_slice(&b"mtu".map(|u| u as i8));
+
+    unsafe {
+        ioctl!(fd.as_raw_fd(), DLDIOC_GETMACPROP, &mut arg)?;
+    }
+
+    Ok(arg.pr_val)
 }
 
 pub(crate) fn get_ipaddrs() -> Result<BTreeMap<String, Vec<IpInfo>>, Error> {

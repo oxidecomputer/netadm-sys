@@ -196,6 +196,14 @@ pub(crate) fn get_link(id: u32) -> Result<LinkInfo, Error> {
         }
     };
 
+    let mtu = match crate::ioctl::get_mtu(id) {
+        Ok(mtu) => mtu,
+        Err(e) => {
+            warn!("error fetching mtu on linkid {}: {}", id, e);
+            0
+        }
+    };
+
     let over = match response.class {
         LinkClass::Simnet => match crate::ioctl::get_simnet_info(id) {
             Ok(info) => info.peer_link_id,
@@ -224,6 +232,7 @@ pub(crate) fn get_link(id: u32) -> Result<LinkInfo, Error> {
     Ok(LinkInfo {
         id,
         mac,
+        mtu,
         over,
         name: name.to_string(),
         flags: response.flags,
