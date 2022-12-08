@@ -167,6 +167,7 @@ pub enum MacPriorityLevel {
 #[allow(dead_code)]
 #[repr(i32)]
 pub enum MacCpuMode {
+    Invalid = 0,
     Fanout = 1,
     Cpus,
 }
