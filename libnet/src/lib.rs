@@ -161,6 +161,7 @@ pub struct LinkInfo {
     pub class: LinkClass,
     pub state: LinkState,
     pub mac: [u8; 6],
+    pub mtu: u32,
     pub over: u32,
 }
 

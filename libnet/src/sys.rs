@@ -251,6 +251,7 @@ impl strioctl {
 pub const LIFNAMSIZ: usize = 32;
 
 pub const DLDIOC_MACADDRGET: ioc_t = DLDIOC!(0x15);
+pub const DLDIOC_GETMACPROP: ioc_t = DLDIOC!(0x1c);
 pub const SIOCLIFREMOVEIF: ioc_t = IOW!('i', 110, lifreq) as ioc_t;
 pub const SIOCLIFADDIF: ioc_t = IOWR!('i', 111, lifreq) as ioc_t;
 pub const SIOCSLIFADDR: ioc_t = IOW!('i', 112, lifreq) as ioc_t;
@@ -261,6 +262,8 @@ pub const SIOCGLIFNETMASK: ioc_t = IOWR!('i', 125, lifreq) as ioc_t;
 pub const SIOCSLIFNETMASK: ioc_t = IOW!('i', 126, lifreq) as ioc_t;
 pub const SIOCSLIFNAME: ioc_t = IOWR!('i', 129, lifreq) as ioc_t;
 pub const SIOCGLIFNUM: ioc_t = IOWR!('i', 130, lifnum) as ioc_t;
+pub const SIOCGLIFMUXID: ioc_t = IOWR!('i', 131, lifreq) as ioc_t;
+pub const SIOCSLIFMUXID: ioc_t = IOW!('i', 132, lifreq) as ioc_t;
 pub const SIOCGLIFINDEX: ioc_t = IOWR!('i', 133, lifreq) as ioc_t;
 pub const SIOCGLIFCONF: ioc_t = IOWRN!('i', 165, 16) as ioc_t;
 pub const SIOCGLIFDADSTATE: ioc_t = IOWR!('i', 190, lifreq) as ioc_t;
@@ -442,6 +445,100 @@ pub struct dld_macaddrinfo {
     pub dma_client_linkid: datalink_id_t,
 }
 pub type dld_macaddrinfo_t = dld_macaddrinfo;
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct dld_ioc_macprop_s<T: ?Sized> {
+    pub pr_flags: uint_t,
+    pub pr_linkid: datalink_id_t,
+    pub pr_num: mac_prop_id_t,
+    pub pr_perm_flags: uint_t,
+    pub pr_name: [::std::os::raw::c_char; 256usize],
+    pub pr_valsize: uint_t,
+    pub pr_val: T,
+}
+pub type dld_ioc_macprop_t<T> = dld_ioc_macprop_s<T>;
+
+pub const mac_prop_id_t_MAC_PROP_PRIVATE: mac_prop_id_t = u32::MAX;
+pub const mac_prop_id_t_MAC_PROP_DUPLEX: mac_prop_id_t = 0x00000001;
+pub const mac_prop_id_t_MAC_PROP_SPEED: mac_prop_id_t = 2;
+pub const mac_prop_id_t_MAC_PROP_STATUS: mac_prop_id_t = 3;
+pub const mac_prop_id_t_MAC_PROP_AUTONEG: mac_prop_id_t = 4;
+pub const mac_prop_id_t_MAC_PROP_EN_AUTONEG: mac_prop_id_t = 5;
+pub const mac_prop_id_t_MAC_PROP_MTU: mac_prop_id_t = 6;
+pub const mac_prop_id_t_MAC_PROP_ZONE: mac_prop_id_t = 7;
+pub const mac_prop_id_t_MAC_PROP_AUTOPUSH: mac_prop_id_t = 8;
+pub const mac_prop_id_t_MAC_PROP_FLOWCTRL: mac_prop_id_t = 9;
+pub const mac_prop_id_t_MAC_PROP_ADV_1000FDX_CAP: mac_prop_id_t = 10;
+pub const mac_prop_id_t_MAC_PROP_EN_1000FDX_CAP: mac_prop_id_t = 11;
+pub const mac_prop_id_t_MAC_PROP_ADV_1000HDX_CAP: mac_prop_id_t = 12;
+pub const mac_prop_id_t_MAC_PROP_EN_1000HDX_CAP: mac_prop_id_t = 13;
+pub const mac_prop_id_t_MAC_PROP_ADV_100FDX_CAP: mac_prop_id_t = 14;
+pub const mac_prop_id_t_MAC_PROP_EN_100FDX_CAP: mac_prop_id_t = 15;
+pub const mac_prop_id_t_MAC_PROP_ADV_100HDX_CAP: mac_prop_id_t = 16;
+pub const mac_prop_id_t_MAC_PROP_EN_100HDX_CAP: mac_prop_id_t = 17;
+pub const mac_prop_id_t_MAC_PROP_ADV_10FDX_CAP: mac_prop_id_t = 18;
+pub const mac_prop_id_t_MAC_PROP_EN_10FDX_CAP: mac_prop_id_t = 19;
+pub const mac_prop_id_t_MAC_PROP_ADV_10HDX_CAP: mac_prop_id_t = 20;
+pub const mac_prop_id_t_MAC_PROP_EN_10HDX_CAP: mac_prop_id_t = 21;
+pub const mac_prop_id_t_MAC_PROP_ADV_100T4_CAP: mac_prop_id_t = 22;
+pub const mac_prop_id_t_MAC_PROP_EN_100T4_CAP: mac_prop_id_t = 23;
+pub const mac_prop_id_t_MAC_PROP_IPTUN_HOPLIMIT: mac_prop_id_t = 24;
+pub const mac_prop_id_t_MAC_PROP_IPTUN_ENCAPLIMIT: mac_prop_id_t = 25;
+pub const mac_prop_id_t_MAC_PROP_WL_ESSID: mac_prop_id_t = 26;
+pub const mac_prop_id_t_MAC_PROP_WL_BSSID: mac_prop_id_t = 27;
+pub const mac_prop_id_t_MAC_PROP_WL_BSSTYPE: mac_prop_id_t = 28;
+pub const mac_prop_id_t_MAC_PROP_WL_LINKSTATUS: mac_prop_id_t = 29;
+pub const mac_prop_id_t_MAC_PROP_WL_DESIRED_RATES: mac_prop_id_t = 30;
+pub const mac_prop_id_t_MAC_PROP_WL_SUPPORTED_RATES: mac_prop_id_t = 31;
+pub const mac_prop_id_t_MAC_PROP_WL_AUTH_MODE: mac_prop_id_t = 32;
+pub const mac_prop_id_t_MAC_PROP_WL_ENCRYPTION: mac_prop_id_t = 33;
+pub const mac_prop_id_t_MAC_PROP_WL_RSSI: mac_prop_id_t = 34;
+pub const mac_prop_id_t_MAC_PROP_WL_PHY_CONFIG: mac_prop_id_t = 35;
+pub const mac_prop_id_t_MAC_PROP_WL_CAPABILITY: mac_prop_id_t = 36;
+pub const mac_prop_id_t_MAC_PROP_WL_WPA: mac_prop_id_t = 37;
+pub const mac_prop_id_t_MAC_PROP_WL_SCANRESULTS: mac_prop_id_t = 38;
+pub const mac_prop_id_t_MAC_PROP_WL_POWER_MODE: mac_prop_id_t = 39;
+pub const mac_prop_id_t_MAC_PROP_WL_RADIO: mac_prop_id_t = 40;
+pub const mac_prop_id_t_MAC_PROP_WL_ESS_LIST: mac_prop_id_t = 41;
+pub const mac_prop_id_t_MAC_PROP_WL_KEY_TAB: mac_prop_id_t = 42;
+pub const mac_prop_id_t_MAC_PROP_WL_CREATE_IBSS: mac_prop_id_t = 43;
+pub const mac_prop_id_t_MAC_PROP_WL_SETOPTIE: mac_prop_id_t = 44;
+pub const mac_prop_id_t_MAC_PROP_WL_DELKEY: mac_prop_id_t = 45;
+pub const mac_prop_id_t_MAC_PROP_WL_KEY: mac_prop_id_t = 46;
+pub const mac_prop_id_t_MAC_PROP_WL_MLME: mac_prop_id_t = 47;
+pub const mac_prop_id_t_MAC_PROP_TAGMODE: mac_prop_id_t = 48;
+pub const mac_prop_id_t_MAC_PROP_ADV_10GFDX_CAP: mac_prop_id_t = 49;
+pub const mac_prop_id_t_MAC_PROP_EN_10GFDX_CAP: mac_prop_id_t = 50;
+pub const mac_prop_id_t_MAC_PROP_PVID: mac_prop_id_t = 51;
+pub const mac_prop_id_t_MAC_PROP_LLIMIT: mac_prop_id_t = 52;
+pub const mac_prop_id_t_MAC_PROP_LDECAY: mac_prop_id_t = 53;
+pub const mac_prop_id_t_MAC_PROP_RESOURCE: mac_prop_id_t = 54;
+pub const mac_prop_id_t_MAC_PROP_RESOURCE_EFF: mac_prop_id_t = 55;
+pub const mac_prop_id_t_MAC_PROP_RXRINGSRANGE: mac_prop_id_t = 56;
+pub const mac_prop_id_t_MAC_PROP_TXRINGSRANGE: mac_prop_id_t = 57;
+pub const mac_prop_id_t_MAC_PROP_MAX_TX_RINGS_AVAIL: mac_prop_id_t = 58;
+pub const mac_prop_id_t_MAC_PROP_MAX_RX_RINGS_AVAIL: mac_prop_id_t = 59;
+pub const mac_prop_id_t_MAC_PROP_MAX_RXHWCLNT_AVAIL: mac_prop_id_t = 60;
+pub const mac_prop_id_t_MAC_PROP_MAX_TXHWCLNT_AVAIL: mac_prop_id_t = 61;
+pub const mac_prop_id_t_MAC_PROP_IB_LINKMODE: mac_prop_id_t = 62;
+pub const mac_prop_id_t_MAC_PROP_VN_PROMISC_FILTERED: mac_prop_id_t = 63;
+pub const mac_prop_id_t_MAC_PROP_SECONDARY_ADDRS: mac_prop_id_t = 64;
+pub const mac_prop_id_t_MAC_PROP_ADV_40GFDX_CAP: mac_prop_id_t = 65;
+pub const mac_prop_id_t_MAC_PROP_EN_40GFDX_CAP: mac_prop_id_t = 66;
+pub const mac_prop_id_t_MAC_PROP_ADV_100GFDX_CAP: mac_prop_id_t = 67;
+pub const mac_prop_id_t_MAC_PROP_EN_100GFDX_CAP: mac_prop_id_t = 68;
+pub const mac_prop_id_t_MAC_PROP_ADV_2500FDX_CAP: mac_prop_id_t = 69;
+pub const mac_prop_id_t_MAC_PROP_EN_2500FDX_CAP: mac_prop_id_t = 70;
+pub const mac_prop_id_t_MAC_PROP_ADV_5000FDX_CAP: mac_prop_id_t = 71;
+pub const mac_prop_id_t_MAC_PROP_EN_5000FDX_CAP: mac_prop_id_t = 72;
+pub const mac_prop_id_t_MAC_PROP_ADV_25GFDX_CAP: mac_prop_id_t = 73;
+pub const mac_prop_id_t_MAC_PROP_EN_25GFDX_CAP: mac_prop_id_t = 74;
+pub const mac_prop_id_t_MAC_PROP_ADV_50GFDX_CAP: mac_prop_id_t = 75;
+pub const mac_prop_id_t_MAC_PROP_EN_50GFDX_CAP: mac_prop_id_t = 76;
+pub const mac_prop_id_t_MAC_PROP_EN_FEC_CAP: mac_prop_id_t = 77;
+pub const mac_prop_id_t_MAC_PROP_ADV_FEC_CAP: mac_prop_id_t = 78;
+pub type mac_prop_id_t = ::std::os::raw::c_uint;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]

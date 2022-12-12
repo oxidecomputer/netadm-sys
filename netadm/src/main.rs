@@ -421,22 +421,24 @@ fn show_links(_opts: &Opts, _s: &Show, _l: &ShowLinks) -> Result<()> {
 
     writeln!(
         &mut tw,
-        "{}\t{}\t{}\t{}\t{}\t{}",
+        "{}\t{}\t{}\t{}\t{}\t{}\t{}",
         "Id".dimmed(),
         "Name".dimmed(),
         "Flags".dimmed(),
         "Class".dimmed(),
         "State".dimmed(),
         "MAC".dimmed(),
+        "MTU".dimmed(),
     )?;
     writeln!(
         &mut tw,
-        "{}\t{}\t{}\t{}\t{}\t{}",
+        "{}\t{}\t{}\t{}\t{}\t{}\t{}",
         "--".bright_black(),
         "----".bright_black(),
         "-----".bright_black(),
         "-----".bright_black(),
         "-----".bright_black(),
+        "---".bright_black(),
         "---".bright_black(),
     )?;
 
@@ -461,8 +463,8 @@ fn show_links(_opts: &Opts, _s: &Show, _l: &ShowLinks) -> Result<()> {
 
         writeln!(
             &mut tw,
-            "{}\t{}\t{}\t{}\t{}\t{}",
-            l.id, name, l.flags, l.class, l.state, macf,
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            l.id, name, l.flags, l.class, l.state, macf, l.mtu,
         )?;
     }
     tw.flush()?;

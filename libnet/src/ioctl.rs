@@ -3,7 +3,8 @@
 use crate::ip::{self, addrobjname_to_addrobj};
 use crate::ndpd::disable_autoconf;
 use crate::sys::{
-    self, dld_ioc_macaddrget_t, dld_macaddrinfo_t, DLDIOC_MACADDRGET,
+    self, dld_ioc_macaddrget_t, dld_ioc_macprop_t, dld_macaddrinfo_t,
+    mac_prop_id_t_MAC_PROP_MTU, DLDIOC_GETMACPROP, DLDIOC_MACADDRGET,
     SIMNET_IOC_INFO, SIMNET_IOC_MODIFY,
 };
 use crate::{Error, IpInfo, IpPrefix, IpState, LinkFlags};
@@ -25,26 +26,22 @@ use tracing::{debug, warn};
 
 macro_rules! ioctl {
     ( $fd:expr, $req:expr, $($args:expr),* ) => {{
-        $(
-            match libc::ioctl($fd, $req, $args) {
-                -1 => Err(Error::Ioctl(format!(
-                    "ioctl @{}={} {}: {}",
-                    stringify!($fd), $fd,
-                    stringify!($req),
-                    std::io::Error::last_os_error(),
-                ))),
-                x => Ok(x)
-            }
-        )*
+        match libc::ioctl($fd, $req, $($args),*) {
+            -1 => Err(Error::Ioctl(format!(
+                "ioctl @{}={} {}: {}",
+                stringify!($fd), $fd,
+                stringify!($req),
+                std::io::Error::last_os_error(),
+            ))),
+            x => Ok(x)
+        }
     }}
 }
 
 // "rusty" ioctl where the first argument implements std::os::unix::io::AsRawFd
 macro_rules! rioctl {
     ( $fd:expr, $req:expr, $($args:expr),* ) => {{
-        $(
-            ioctl!($fd.as_raw_fd(), $req, $args)
-        )*
+        ioctl!($fd.as_raw_fd(), $req, $($args),*)
     }}
 }
 
@@ -167,6 +164,7 @@ pub enum MacPriorityLevel {
 #[allow(dead_code)]
 #[repr(i32)]
 pub enum MacCpuMode {
+    Invalid = 0,
     Fanout = 1,
     Cpus,
 }
@@ -413,6 +411,27 @@ pub(crate) fn get_macaddr(linkid: u32) -> Result<[u8; 6], Error> {
     }
 }
 
+pub(crate) fn get_mtu(linkid: u32) -> Result<u32, Error> {
+    let fd = dld_fd()?;
+
+    let mut arg = dld_ioc_macprop_t::<u32> {
+        pr_flags: 0,
+        pr_linkid: linkid,
+        pr_num: mac_prop_id_t_MAC_PROP_MTU,
+        pr_perm_flags: 0,
+        pr_name: [0; 256],
+        pr_valsize: size_of::<u32>() as u32,
+        pr_val: 0,
+    };
+    arg.pr_name[..3].copy_from_slice(&b"mtu".map(|u| u as i8));
+
+    unsafe {
+        ioctl!(fd.as_raw_fd(), DLDIOC_GETMACPROP, &mut arg)?;
+    }
+
+    Ok(arg.pr_val)
+}
+
 pub(crate) fn get_ipaddrs() -> Result<BTreeMap<String, Vec<IpInfo>>, Error> {
     let mut result: BTreeMap<String, Vec<IpInfo>> = BTreeMap::new();
 
@@ -537,6 +556,8 @@ pub(crate) fn delete_ipaddr(objname: impl AsRef<str>) -> Result<(), Error> {
         return Err(Error::Ipmgmtd(sys::err_string(resp.err)));
     }
 
+    let af = resp.family as i32;
+
     // delete the address from kernel
     let mut ior: sys::lifreq = unsafe { std::mem::zeroed() };
     let mut i = 0;
@@ -620,6 +641,8 @@ pub(crate) fn delete_ipaddr(objname: impl AsRef<str>) -> Result<(), Error> {
         }
         free(response as *mut c_void);
     }
+
+    unplumb_for_af(ifname, af)?;
 
     Ok(())
 }
@@ -708,36 +731,39 @@ fn plumb_for_af(name: &str, ifflags: u64) -> Result<(), Error> {
     unsafe { ioctl!(ip_fd, sys::SIOCGLIFFLAGS, &req)? };
 
     let mux_fd = if (ifflags & (sys::IFF_IPV6 as u64)) != 0 {
-        let dev = b"/dev/udp6\0";
-        let devname = CStr::from_bytes_with_nul(dev).unwrap();
-        unsafe { libc::open(devname.as_ptr(), libc::O_RDWR) }
+        File::open("/dev/udp6")?
     } else {
-        let dev = b"/dev/udp\0";
-        let devname = CStr::from_bytes_with_nul(dev).unwrap();
-        unsafe { libc::open(devname.as_ptr(), libc::O_RDWR) }
+        File::open("/dev/udp")?
     };
 
     // pop off unwanted modules
     loop {
-        if unsafe { ioctl!(mux_fd, sys::I_POP, 0).is_err() } {
+        if unsafe { rioctl!(mux_fd, sys::I_POP, 0).is_err() } {
             break;
         }
     }
 
     // push on arp module
     let arp_mod_name = CStr::from_bytes_with_nul(sys::ARP_MOD_NAME).unwrap();
-    unsafe { ioctl!(mux_fd, sys::I_PUSH, arp_mod_name)? };
+    unsafe { rioctl!(mux_fd, sys::I_PUSH, arp_mod_name)? };
 
     // check if ARP is not needed
     if (ifflags & ((sys::IFF_NOARP | sys::IFF_IPV6) as u64)) != 0 {
         unsafe {
-            let res = ioctl!(mux_fd, sys::I_PLINK, ip_fd);
-
-            // TODO check
-            libc::close(mux_fd);
+            let res = rioctl!(mux_fd, sys::I_PLINK, ip_fd);
 
             return match res {
-                Ok(_) => Ok(disable_autoconf(name)?),
+                Ok(ip_muxid) => {
+                    // Stash the muxid to later use while unplumbing
+                    let mut req = sys::lifreq::new();
+                    for (i, c) in name.chars().enumerate() {
+                        req.lifr_name[i] = c as c_char;
+                    }
+                    req.lifr_lifru.lif_muxid[0] = ip_muxid;
+                    rioctl!(mux_fd, sys::SIOCSLIFMUXID, &mut req)?;
+
+                    Ok(disable_autoconf(name)?)
+                }
                 Err(e) => Err(e),
             };
         }
@@ -765,14 +791,74 @@ fn plumb_for_af(name: &str, ifflags: u64) -> Result<(), Error> {
     )?;
 
     // plink IP and arp streams
-    let ip_muxid = unsafe { ioctl!(mux_fd, sys::I_PLINK, ip_fd)? };
+    let ip_muxid = unsafe { rioctl!(mux_fd, sys::I_PLINK, ip_fd)? };
 
     unsafe {
-        if let Err(e) = ioctl!(mux_fd, sys::I_PLINK, arp_fd) {
-            if let Err(e) = ioctl!(mux_fd, sys::I_PUNLINK, ip_muxid) {
+        let arp_muxid = match rioctl!(mux_fd, sys::I_PLINK, arp_fd) {
+            Ok(muxid) => muxid,
+            Err(e) => {
+                // undo the plink of IP stream
+                if let Err(e) = rioctl!(mux_fd, sys::I_PUNLINK, ip_muxid) {
+                    println!("punlink failed: {}", e);
+                }
+                return Err(e);
+            }
+        };
+
+        // Stash the muxids to later use while unplumbing
+        let mut req = sys::lifreq::new();
+        for (i, c) in name.chars().enumerate() {
+            req.lifr_name[i] = c as c_char;
+        }
+        req.lifr_lifru.lif_muxid[0] = ip_muxid;
+        req.lifr_lifru.lif_muxid[1] = arp_muxid;
+        rioctl!(mux_fd, sys::SIOCSLIFMUXID, &mut req)?;
+    }
+
+    Ok(())
+}
+
+fn unplumb_for_af(name: &str, af: i32) -> Result<(), Error> {
+    let mux_fd = if af == libc::AF_INET6 {
+        File::open("/dev/udp6")?
+    } else if af == libc::AF_INET {
+        File::open("/dev/udp")?
+    } else {
+        return Err(Error::BadArgument(format!(
+            "Invalid address family: {}",
+            af
+        )));
+    };
+
+    let mut req = sys::lifreq::new();
+    for (i, c) in name.chars().enumerate() {
+        req.lifr_name[i] = c as c_char;
+    }
+
+    let (ip_muxid, arp_muxid) = unsafe {
+        rioctl!(mux_fd, sys::SIOCGLIFMUXID, &mut req)?;
+        (req.lifr_lifru.lif_muxid[0], req.lifr_lifru.lif_muxid[1])
+    };
+
+    // pop off unwanted modules
+    loop {
+        if unsafe { rioctl!(mux_fd, sys::I_POP, 0).is_err() } {
+            break;
+        }
+    }
+
+    // push on arp module
+    let arp_mod_name = CStr::from_bytes_with_nul(sys::ARP_MOD_NAME).unwrap();
+    unsafe { rioctl!(mux_fd, sys::I_PUSH, arp_mod_name)? };
+
+    unsafe {
+        if arp_muxid != 0 && arp_muxid != -1 {
+            if let Err(e) = rioctl!(mux_fd, sys::I_PUNLINK, arp_muxid) {
                 println!("punlink failed: {}", e);
             }
-            return Err(e);
+        }
+        if let Err(e) = rioctl!(mux_fd, sys::I_PUNLINK, ip_muxid) {
+            println!("punlink failed: {}", e);
         }
     }
 
@@ -963,12 +1049,9 @@ pub(crate) fn enable_v6_link_local(
 
     let sock = Socket::new(Domain::IPV6, Type::DGRAM, None)?;
 
-    match is_plumbed_for_af(ifname, &sock) {
-        true => {}
-        false => {
-            plumb_for_af(ifname, sys::IFF_IPV6.into())?;
-        }
-    };
+    if !is_plumbed_for_af(ifname, &sock) {
+        plumb_for_af(ifname, sys::IFF_IPV6.into())?;
+    }
 
     create_ip_addr_linklocal(&sock, ifname, &objname)
 }
