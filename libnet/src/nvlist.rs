@@ -99,7 +99,7 @@ pub enum Value<'a> {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum NvDataType {
     DontCare = -1,

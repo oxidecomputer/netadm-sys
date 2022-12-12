@@ -248,6 +248,12 @@ impl strioctl {
     }
 }
 
+impl Default for strioctl {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub const LIFNAMSIZ: usize = 32;
 
 pub const DLDIOC_MACADDRGET: ioc_t = DLDIOC!(0x15);

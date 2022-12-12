@@ -2,8 +2,8 @@
 #:
 #: name = "build-and-test"
 #: variety = "basic"
-#: target = "helios-20220404"
-#: rust_toolchain = "nightly-2021-09-03"
+#: target = "helios"
+#: rust_toolchain = "stable"
 #: output_rules = [
 #:   "/work/debug/*",
 #:   "/work/release/*",
@@ -29,7 +29,7 @@ done
 
 banner check
 cargo fmt -- --check
-cargo clippy
+cargo clippy -- --deny warnings
 
 banner pre-test
 uname -a
