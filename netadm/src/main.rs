@@ -461,10 +461,16 @@ fn show_links(_opts: &Opts, _s: &Show, _l: &ShowLinks) -> Result<()> {
             l.mac[0], l.mac[1], l.mac[2], l.mac[3], l.mac[4], l.mac[5],
         );
 
+        let mtu = if let Some(mtu) = l.mtu {
+            mtu.to_string()
+        } else {
+            "?".to_string()
+        };
+
         writeln!(
             &mut tw,
             "{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            l.id, name, l.flags, l.class, l.state, macf, l.mtu,
+            l.id, name, l.flags, l.class, l.state, macf, mtu,
         )?;
     }
     tw.flush()?;
