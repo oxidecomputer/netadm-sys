@@ -197,10 +197,10 @@ pub(crate) fn get_link(id: u32) -> Result<LinkInfo, Error> {
     };
 
     let mtu = match crate::ioctl::get_mtu(id) {
-        Ok(mtu) => mtu,
+        Ok(mtu) => Some(mtu),
         Err(e) => {
             warn!("error fetching mtu on linkid {}: {}", id, e);
-            0
+            None
         }
     };
 
