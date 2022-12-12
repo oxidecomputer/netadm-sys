@@ -1541,6 +1541,9 @@ pub(crate) fn create_vnic(
         };
         match mac {
             None => {
+                // This seems to be the OUI prefix used for bhyve/virtio NICs
+                // but I cannot find a documentation reference that actually
+                // says so.
                 arg.mac_addr[0] = 0x02;
                 arg.mac_addr[1] = 0x08;
                 arg.mac_addr[2] = 0x20;
