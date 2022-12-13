@@ -6,7 +6,7 @@ use colored::*;
 use libnet::{
     self, add_route, create_ipaddr, create_simnet_link, create_tfport_link,
     create_vnic_link, get_ipaddr_info, get_ipaddrs, get_link, get_links, ip,
-    route, IpPrefix, IpState, LinkFlags, LinkHandle,
+    route, sys::MAXMACADDRLEN, IpPrefix, IpState, LinkFlags, LinkHandle,
 };
 use std::io::{stdout, Write};
 use std::net::IpAddr;
@@ -204,6 +204,8 @@ struct CreateVnic {
     name: String,
     #[clap(about = "simnet link-id or name")]
     link: LinkHandle,
+    #[clap(short, long, about = "mac address")]
+    mac: Option<String>,
 }
 
 #[derive(Parser)]
@@ -376,7 +378,26 @@ fn create_tfport(_opts: &Opts, _c: &Create, s: &CreateTfport) -> Result<()> {
 }
 
 fn create_vnic(_opts: &Opts, _c: &Create, s: &CreateVnic) -> Result<()> {
-    create_vnic_link(&s.name, &s.link, LinkFlags::Active)?;
+    match &s.mac {
+        None => {
+            create_vnic_link(&s.name, &s.link, None, LinkFlags::Active)?;
+        }
+        Some(mac) => {
+            let parts: Vec<&str> = mac.split(':').collect();
+            if parts.len() > MAXMACADDRLEN as usize {
+                return Err(anyhow!(
+                    "mac cannot exceed {} bytes",
+                    MAXMACADDRLEN
+                ));
+            }
+            let mut m = Vec::new();
+            for p in parts {
+                let x = u8::from_str_radix(p, 16)?;
+                m.push(x)
+            }
+            create_vnic_link(&s.name, &s.link, Some(m), LinkFlags::Active)?;
+        }
+    }
     // should we print back?
     Ok(())
 }

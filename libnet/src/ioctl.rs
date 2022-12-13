@@ -1510,6 +1510,7 @@ impl Default for VnicIocCreate {
 pub(crate) fn create_vnic(
     id: u32,
     link_id: u32,
+    mac: Option<Vec<u8>>,
 ) -> Result<crate::LinkInfo, Error> {
     unsafe {
         let fd = dld_fd()?;
@@ -1519,9 +1520,18 @@ pub(crate) fn create_vnic(
         let mut arg = VnicIocCreate {
             link_id,
             vnic_id: id,
-            mac_addr_type: VnicMacAddrType::Auto,
-            mac_len: 0,
-            mac_prefix_len: 3,
+            mac_addr_type: match mac {
+                None => VnicMacAddrType::Auto,
+                Some(_) => VnicMacAddrType::Fixed,
+            },
+            mac_len: match &mac {
+                None => 0,
+                Some(mac) => mac.len() as u32,
+            },
+            mac_prefix_len: match mac {
+                None => 3,
+                Some(_) => 0,
+            },
             mac_slot: -1,
             vid: 0,
             vrid: 0,
@@ -1529,9 +1539,24 @@ pub(crate) fn create_vnic(
             flags: 0,
             ..Default::default()
         };
-        arg.mac_addr[0] = 0x02;
-        arg.mac_addr[1] = 0x08;
-        arg.mac_addr[2] = 0x20;
+        match mac {
+            None => {
+                // This seems to be the OUI prefix used for bhyve/virtio NICs
+                // but I cannot find a documentation reference that actually
+                // says so.
+                arg.mac_addr[0] = 0x02;
+                arg.mac_addr[1] = 0x08;
+                arg.mac_addr[2] = 0x20;
+            }
+            Some(mac) => {
+                if mac.len() > 20 {
+                    return Err(Error::BadArgument("mac too long".to_string()));
+                }
+                for (i, x) in mac.iter().enumerate() {
+                    arg.mac_addr[i] = *x;
+                }
+            }
+        };
 
         sys::clear_errno();
         rioctl!(fd, sys::VNIC_IOC_CREATE, &arg)?;

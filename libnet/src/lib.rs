@@ -22,11 +22,13 @@ pub mod link;
 /// state.
 pub mod route;
 
+/// System-level machinery
+pub mod sys;
+
 mod ioctl;
 mod kstat;
 mod ndpd;
 mod nvlist;
-mod sys;
 
 /// Error variants returned by netadm_sys.
 #[derive(thiserror::Error, Debug)]
@@ -64,7 +66,7 @@ pub enum Error {
 // Datalink management --------------------------------------------------------
 
 /// Link flags specifiy if a link is active, persistent, or both.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum LinkFlags {
     Active = 0x1,
@@ -90,7 +92,7 @@ impl Display for LinkFlags {
 }
 
 /// Link class specifies the type of datalink.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 #[repr(C)]
 pub enum LinkClass {
     Phys = 0x01,
@@ -129,7 +131,7 @@ impl Display for LinkClass {
 }
 
 /// Link state indicates the carrier status of the link.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum LinkState {
     Unknown,
     Down,
@@ -153,7 +155,7 @@ impl Display for LinkState {
 }
 
 /// Information about a datalink.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct LinkInfo {
     pub id: u32,
     pub name: String,
@@ -300,9 +302,10 @@ pub fn get_tfport_info(link: &LinkHandle) -> Result<TfportInfo, Error> {
 pub fn create_vnic_link(
     name: &str,
     link: &LinkHandle,
+    mac: Option<Vec<u8>>,
     flags: LinkFlags,
 ) -> Result<LinkInfo, Error> {
-    crate::link::create_vnic_link(name, link.id()?, flags)
+    crate::link::create_vnic_link(name, link.id()?, mac, flags)
 }
 
 /// Delete a data link identified by `handle`.
@@ -336,7 +339,7 @@ pub fn connect_simnet_peers(
 // IP address management ------------------------------------------------------
 
 /// The state of an IP address in the kernel.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 #[repr(i32)]
 pub enum IpState {
     Disabled = 0,
@@ -348,7 +351,7 @@ pub enum IpState {
 }
 
 /// Information in the kernel about an IP address.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct IpInfo {
     pub ifname: String,
     pub index: i32,
