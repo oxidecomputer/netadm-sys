@@ -238,10 +238,7 @@ pub fn get_routes() -> Result<Vec<Route>, Error> {
             Some(d) => d.ip(),
             None => continue,
         };
-        let delay = match msg.delay {
-            Some(d) => d,
-            None => 0,
-        };
+        let delay = msg.delay.unwrap_or(0);
 
         let r = Route {
             dest,
