@@ -89,7 +89,7 @@ pub struct Route {
     pub delay: u32,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct RtMsg {
     pub dst: Option<SocketAddr>,
     pub gw: Option<SocketAddr>,
@@ -100,6 +100,7 @@ pub struct RtMsg {
     pub author: Option<SocketAddr>,
     pub brd: Option<SocketAddr>,
     pub src: Option<SocketAddr>,
+    pub delay: Option<u32>,
 }
 
 unsafe fn read_msg(buf: &[u8]) -> (RtMsg, &[u8]) {
@@ -115,6 +116,7 @@ unsafe fn read_msg(buf: &[u8]) -> (RtMsg, &[u8]) {
     let (author, buf) = get_addr_element(hdr, buf, RTA_AUTHOR as i32);
     let (brd, buf) = get_addr_element(hdr, buf, RTA_BRD as i32);
     let (src, buf) = get_addr_element(hdr, buf, RTA_SRC as i32);
+    let (delay, buf) = get_u32_element(hdr, buf, RTA_DELAY as i32);
 
     (
         RtMsg {
@@ -127,9 +129,22 @@ unsafe fn read_msg(buf: &[u8]) -> (RtMsg, &[u8]) {
             author,
             brd,
             src,
+            delay,
         },
         buf,
     )
+}
+
+unsafe fn get_u32_element(
+    hdr: *const rt_msghdr,
+    buf: &[u8],
+    rta: i32,
+) -> (Option<u32>, &[u8]) {
+    if ((*hdr).addrs & rta) == 0 {
+        return (None, buf);
+    }
+    let value = *(buf.as_ptr() as *const u32);
+    (Some(value), &buf[4..])
 }
 
 unsafe fn get_addr_element(
@@ -223,12 +238,16 @@ pub fn get_routes() -> Result<Vec<Route>, Error> {
             Some(d) => d.ip(),
             None => continue,
         };
+        let delay = match msg.delay {
+            Some(d) => d,
+            None => 0,
+        };
 
         let r = Route {
             dest,
             mask,
             gw,
-            delay: 0,
+            delay,
         };
         result.push(r);
     }
