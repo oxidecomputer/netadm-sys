@@ -42,7 +42,7 @@ pub fn get_routes() -> Result<Vec<Route>, Error> {
     let mut result = Vec::new();
 
     unsafe {
-        let sfd = socket(AF_ROUTE as i32, SOCK_RAW as i32, AF_UNSPEC as i32);
+        let sfd = socket(AF_ROUTE, SOCK_RAW, AF_UNSPEC);
         if sfd < 0 {
             return Err(Error::SystemError(format!(
                 "socket: {}",
@@ -102,7 +102,7 @@ pub fn get_routes() -> Result<Vec<Route>, Error> {
                 }
                 _ => {
                     p = (p as *mut u8).offset((*hdr).msglen as isize);
-                    if p.offset_from(buf.as_mut_ptr()) >= n as isize {
+                    if p.offset_from(buf.as_mut_ptr()) >= n {
                         break;
                     }
                     continue;
@@ -143,7 +143,7 @@ pub fn get_routes() -> Result<Vec<Route>, Error> {
                     }
                     _ => {
                         p = (p as *mut u8).offset((*hdr).msglen as isize);
-                        if p.offset_from(buf.as_mut_ptr()) >= n as isize {
+                        if p.offset_from(buf.as_mut_ptr()) >= n {
                             break;
                         }
                         continue;
@@ -154,7 +154,7 @@ pub fn get_routes() -> Result<Vec<Route>, Error> {
             result.push(Route { dest, mask, gw });
 
             p = (p as *mut u8).offset((*hdr).msglen as isize);
-            if p.offset_from(buf.as_mut_ptr()) >= n as isize {
+            if p.offset_from(buf.as_mut_ptr()) >= n {
                 break;
             }
         }
@@ -200,7 +200,7 @@ fn mod_route(
     cmd: u8,
 ) -> Result<(), Error> {
     unsafe {
-        let sfd = socket(AF_ROUTE as i32, SOCK_RAW as i32, AF_UNSPEC as i32);
+        let sfd = socket(AF_ROUTE, SOCK_RAW, AF_UNSPEC);
         if sfd < 0 {
             return Err(Error::SystemError(format!(
                 "socket: {}",
