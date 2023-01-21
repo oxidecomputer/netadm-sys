@@ -1,4 +1,5 @@
 // Copyright 2021 Oxide Computer Company
+#![allow(clippy::unnecessary_cast)]
 
 use crate::ip::{self, addrobjname_to_addrobj};
 use crate::ndpd::disable_autoconf;
@@ -1333,7 +1334,7 @@ fn ipmgmtd_persist(
     let mut nvl = nvpair::NvList::new_unique_names();
     nvl.insert("_ifname", ifname)?;
     nvl.insert("_aobjname", objname)?;
-    nvl.insert("_lifnum", &(lifnum as i32))?;
+    nvl.insert("_lifnum", &lifnum)?;
 
     match addr {
         Some(addr) => {
@@ -1544,7 +1545,7 @@ pub(crate) fn create_vnic(
             mac_slot: -1,
             vid: 0,
             vrid: 0,
-            af: AF_UNSPEC as i32,
+            af: AF_UNSPEC,
             flags: 0,
             ..Default::default()
         };

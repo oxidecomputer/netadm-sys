@@ -577,7 +577,7 @@ fn extract_nvps(mut p: *const u8, size: i32) -> (Vec<NVP<'static>>, i32) {
 
             p = p.add(sz as usize);
             p = p.add(p.align_offset(align_of::<u32>()));
-            consumed += sz as i32;
+            consumed += sz;
             trace!("consumed {}", consumed);
             if consumed >= size {
                 break;
