@@ -428,28 +428,16 @@ pub fn get_routes() -> Result<Vec<crate::route::Route>, Error> {
 }
 
 /// Add a route to `destination` via `gateway`.
-pub fn add_route(destination: IpPrefix, gateway: IpAddr) -> Result<(), Error> {
-    Ok(crate::route::add_route(destination, gateway)?)
-}
+pub use crate::route::add_route;
 
 /// Ensure a route to `destination` via `gateway` is present.
 ///
 /// Same as `add_route` except no error is returned if the route already exists
 /// on the system.
-pub fn ensure_route_present(
-    destination: IpPrefix,
-    gateway: IpAddr,
-) -> Result<(), Error> {
-    Ok(crate::route::ensure_route_present(destination, gateway)?)
-}
+pub use crate::route::ensure_route_present;
 
 /// Delete a route to `destination` via `gateway`.
-pub fn delete_route(
-    destination: IpPrefix,
-    gateway: IpAddr,
-) -> Result<(), Error> {
-    Ok(crate::route::delete_route(destination, gateway)?)
-}
+pub use crate::route::delete_route;
 
 /// An IP prefix is the leading bits of an IP address combined with a prefix
 /// length indicating the number of leading bits that are significant.

@@ -222,6 +222,8 @@ struct CreateRoute {
     destination: IpPrefix,
     #[clap(about = "route gateway")]
     gateway: IpAddr,
+    #[clap(about = "route interface")]
+    interface: Option<String>,
 }
 
 #[derive(Parser)]
@@ -230,6 +232,8 @@ struct DeleteRoute {
     destination: IpPrefix,
     #[clap(about = "route gateway")]
     gateway: IpAddr,
+    #[clap(about = "route interface")]
+    interface: Option<String>,
 }
 
 #[derive(Parser)]
@@ -411,13 +415,13 @@ fn create_addr(_opts: &Opts, _c: &Create, c: &CreateAddr) -> Result<()> {
 }
 
 fn create_route(_opts: &Opts, _c: &Create, c: &CreateRoute) -> Result<()> {
-    add_route(c.destination, c.gateway)?;
+    add_route(c.destination, c.gateway, c.interface.clone())?;
     // should we print back?
     Ok(())
 }
 
 fn delete_route(_opts: &Opts, _c: &Delete, c: &DeleteRoute) -> Result<()> {
-    libnet::delete_route(c.destination, c.gateway)?;
+    libnet::delete_route(c.destination, c.gateway, c.interface.clone())?;
     // should we print back?
     Ok(())
 }

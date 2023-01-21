@@ -1643,3 +1643,19 @@ pub fn get_neighbor(ifname: &str, addr: Ipv6Addr) -> Result<Neighbor, Error> {
         flags: unsafe { ior.lifr_lifru.lifru_nd_req.lnr_flags },
     })
 }
+
+pub fn get_ifnum(ifname: &str, af: u16) -> Result<i32, Error> {
+    let s = match af as i32 {
+        AF_INET => Socket::new(Domain::IPV4, Type::DGRAM, None)?,
+        AF_INET6 => Socket::new(Domain::IPV6, Type::DGRAM, None)?,
+        _ => return Err(Error::BadArgument("unknown address family".into())),
+    };
+    let mut ior: sys::lifreq = unsafe { std::mem::zeroed() };
+    for (i, b) in ifname.as_bytes().iter().enumerate() {
+        ior.lifr_name[i] = *b as i8;
+    }
+    unsafe {
+        rioctl!(s, sys::SIOCGLIFINDEX, &ior)?;
+    }
+    Ok(unsafe { ior.lifr_lifru.lifru_index })
+}

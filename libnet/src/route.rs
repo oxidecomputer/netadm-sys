@@ -55,7 +55,10 @@ use std::io::{Read, Write};
 use std::mem::size_of;
 use std::slice::from_raw_parts;
 
-use libc::{sockaddr, sockaddr_in, sockaddr_in6, AF_INET, AF_INET6, AF_ROUTE};
+use libc::{
+    sockaddr, sockaddr_dl, sockaddr_in, sockaddr_in6, AF_INET, AF_INET6,
+    AF_LINK, AF_ROUTE,
+};
 
 use socket2::{Domain, Socket, Type};
 use std::net::{
@@ -69,6 +72,8 @@ pub enum Error {
     NotImplemented(String),
     #[error("system error {0}")]
     SystemError(String),
+    #[error("bad argument: {0}")]
+    BadArgument(String),
     #[error("exists")]
     Exists,
     #[error("route does not exist")]
@@ -252,15 +257,20 @@ pub fn get_routes() -> Result<Vec<Route>, Error> {
     Ok(result)
 }
 
-pub fn add_route(destination: IpPrefix, gateway: IpAddr) -> Result<(), Error> {
-    mod_route(destination, gateway, sys::RTM_ADD as u8)
+pub fn add_route(
+    destination: IpPrefix,
+    gateway: IpAddr,
+    interface: Option<String>,
+) -> Result<(), Error> {
+    mod_route(destination, gateway, interface, sys::RTM_ADD as u8)
 }
 
 pub fn ensure_route_present(
     destination: IpPrefix,
     gateway: IpAddr,
+    interface: Option<String>,
 ) -> Result<(), Error> {
-    match add_route(destination, gateway) {
+    match add_route(destination, gateway, interface) {
         Ok(_) => Ok(()),
         Err(Error::SystemError(msg)) => {
             //TODO this is terrible, include error codes in wrapped errors
@@ -277,13 +287,15 @@ pub fn ensure_route_present(
 pub fn delete_route(
     destination: IpPrefix,
     gateway: IpAddr,
+    interface: Option<String>,
 ) -> Result<(), Error> {
-    mod_route(destination, gateway, sys::RTM_DELETE as u8)
+    mod_route(destination, gateway, interface, sys::RTM_DELETE as u8)
 }
 
 fn mod_route(
     destination: IpPrefix,
     gateway: IpAddr,
+    interface: Option<String>,
     cmd: u8,
 ) -> Result<(), Error> {
     let mut sock = Socket::new(Domain::from(AF_ROUTE), Type::RAW, None)?;
@@ -305,20 +317,21 @@ fn mod_route(
         }
     };
 
+    let flags = (sys::RTF_GATEWAY | sys::RTF_STATIC) as i32;
+    let mut addrs = (RTA_DST | RTA_GATEWAY | RTA_NETMASK) as i32;
+    if interface.is_some() {
+        addrs |= sys::RTA_IFP as i32;
+        msglen += size_of::<sockaddr_dl>();
+    }
+
     let req = rt_msghdr {
         typ: cmd,
         msglen: msglen as u16,
         version: sys::RTM_VERSION as u8,
-        addrs: (RTA_DST | RTA_GATEWAY | RTA_NETMASK) as i32,
+        addrs,
         pid: std::process::id() as i32,
-
-        //TODO
-        seq: 47,
-
-        //TODO more?
-        // set bitmask identifying addresses in message
-        flags: (sys::RTF_GATEWAY | sys::RTF_STATIC) as i32,
-
+        seq: 47, //TODO
+        flags,
         ..Default::default()
     };
 
@@ -333,6 +346,10 @@ fn mod_route(
     serialize_addr(&mut buf, destination.ip());
     serialize_addr(&mut buf, gateway);
     serialize_addr(&mut buf, destination.mask_as_addr());
+
+    if let Some(ifp) = interface {
+        serialize_dladdr(&mut buf, &ifp, destination.ip())?;
+    }
 
     let n = sock.write(&buf)?;
     if n < buf.len() {
@@ -385,4 +402,40 @@ fn serialize_addr(buf: &mut Vec<u8>, a: IpAddr) {
             });
         }
     };
+}
+
+fn serialize_dladdr(
+    buf: &mut Vec<u8>,
+    ifname: &str,
+    ip: IpAddr,
+) -> Result<(), Error> {
+    let bs = ifname.as_bytes();
+    if bs.len() > 244 {
+        return Err(Error::BadArgument("ifname too long".into()));
+    }
+
+    let proto = match ip {
+        IpAddr::V4(_) => AF_INET,
+        IpAddr::V6(_) => AF_INET6,
+    } as u16;
+    let ifnum = crate::ioctl::get_ifnum(ifname, proto)
+        .map_err(|x| Error::SystemError(x.to_string()))?;
+    let mut sa = unsafe {
+        sockaddr_dl {
+            sdl_family: AF_LINK as u16,
+            sdl_index: ifnum as u16,
+            sdl_nlen: bs.len() as u8,
+            ..std::mem::zeroed()
+        }
+    };
+    for (i, b) in bs.iter().enumerate() {
+        sa.sdl_data[i] = *b as i8;
+    }
+    buf.extend_from_slice(unsafe {
+        from_raw_parts(
+            (&sa as *const sockaddr_dl) as *const u8,
+            size_of::<sockaddr_dl>(),
+        )
+    });
+    Ok(())
 }
