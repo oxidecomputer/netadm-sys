@@ -601,10 +601,19 @@ pub(crate) fn delete_ipaddr(objname: impl AsRef<str>) -> Result<(), Error> {
             ior.lifr_lifru.lifru_flags &= !(sys::IFF_UP as u64);
             rioctl!(sock, sys::SIOCSLIFFLAGS, &ior)?;
 
-            let sin6 = &mut ior.lifr_lifru.lifru_addr as *mut sockaddr_storage
-                as *mut sockaddr_in6;
-            (*sin6).sin6_family = AF_INET6 as u16;
-            (*sin6).sin6_addr.s6_addr = [0u8; 16];
+            if af == libc::AF_INET {
+                let sin = &mut ior.lifr_lifru.lifru_addr
+                    as *mut sockaddr_storage
+                    as *mut sockaddr_in;
+                (*sin).sin_family = AF_INET as u16;
+                (*sin).sin_addr.s_addr = 0;
+            } else if af == libc::AF_INET6 {
+                let sin6 = &mut ior.lifr_lifru.lifru_addr
+                    as *mut sockaddr_storage
+                    as *mut sockaddr_in6;
+                (*sin6).sin6_family = AF_INET6 as u16;
+                (*sin6).sin6_addr.s6_addr = [0u8; 16];
+            }
 
             rioctl!(sock, sys::SIOCSLIFADDR, &ior)?;
         }
