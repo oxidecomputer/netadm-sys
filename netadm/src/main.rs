@@ -577,17 +577,19 @@ fn show_routes(_opts: &Opts, _s: &Show, sr: &ShowRoutes) -> Result<()> {
     let mut tw = TabWriter::new(stdout());
     writeln!(
         &mut tw,
-        "{}\t{}\t{}",
+        "{}\t{}\t{}\t{}",
         "Destination".dimmed(),
         "Gateway".dimmed(),
         "Delay".dimmed(),
+        "Interface".dimmed(),
     )?;
     writeln!(
         &mut tw,
-        "{}\t{}\t{}",
+        "{}\t{}\t{}\t{}",
         "-----------".bright_black(),
         "-------".bright_black(),
         "-----".bright_black(),
+        "---------".bright_black(),
     )?;
 
     routes.sort_by_key(|r| r.mask);
@@ -644,7 +646,7 @@ fn show_route(
 ) -> Result<()> {
     writeln!(
         tw,
-        "{}/{}\t{}\t{}",
+        "{}/{}\t{}\t{}\t{}",
         color_ip(r.dest),
         r.mask,
         color_ip(r.gw),
@@ -653,6 +655,11 @@ fn show_route(
         } else {
             "-".dimmed().to_string()
         },
+        if let Some(ifx) = &r.ifx {
+            ifx.clone()
+        } else {
+            "-".dimmed().to_string()
+        }
     )?;
     Ok(())
 }

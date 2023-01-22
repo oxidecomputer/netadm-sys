@@ -92,6 +92,7 @@ pub struct Route {
     pub mask: u32,
     pub gw: IpAddr,
     pub delay: u32,
+    pub ifx: Option<String>,
 }
 
 #[derive(Default, Debug)]
@@ -100,12 +101,18 @@ pub struct RtMsg {
     pub gw: Option<SocketAddr>,
     pub mask: Option<SocketAddr>,
     pub genmask: Option<SocketAddr>,
-    pub ifp: Option<SocketAddr>,
+    pub ifp: Option<SocketDlAddr>,
     pub ifa: Option<SocketAddr>,
     pub author: Option<SocketAddr>,
     pub brd: Option<SocketAddr>,
     pub src: Option<SocketAddr>,
     pub delay: Option<u32>,
+}
+
+#[derive(Debug)]
+pub struct SocketDlAddr {
+    pub index: u16,
+    pub name: String,
 }
 
 unsafe fn read_msg(buf: &[u8]) -> (RtMsg, &[u8]) {
@@ -116,7 +123,7 @@ unsafe fn read_msg(buf: &[u8]) -> (RtMsg, &[u8]) {
     let (gw, buf) = get_addr_element(hdr, buf, RTA_GATEWAY as i32);
     let (mask, buf) = get_addr_element(hdr, buf, RTA_NETMASK as i32);
     let (genmask, buf) = get_addr_element(hdr, buf, RTA_GENMASK as i32);
-    let (ifp, buf) = get_addr_element(hdr, buf, RTA_IFP as i32);
+    let (ifp, buf) = get_dladdr_element(hdr, buf, RTA_IFP as i32);
     let (ifa, buf) = get_addr_element(hdr, buf, RTA_IFA as i32);
     let (author, buf) = get_addr_element(hdr, buf, RTA_AUTHOR as i32);
     let (brd, buf) = get_addr_element(hdr, buf, RTA_BRD as i32);
@@ -150,6 +157,29 @@ unsafe fn get_u32_element(
     }
     let value = *(buf.as_ptr() as *const u32);
     (Some(value), &buf[4..])
+}
+
+unsafe fn get_dladdr_element(
+    hdr: *const rt_msghdr,
+    buf: &[u8],
+    rta: i32,
+) -> (Option<SocketDlAddr>, &[u8]) {
+    if ((*hdr).addrs & rta) == 0 {
+        return (None, buf);
+    }
+
+    let sa = &*(buf.as_ptr() as *mut sockaddr_dl);
+    let index = sa.sdl_index;
+    let mut name = String::new();
+    let len = sa.sdl_nlen as usize;
+    if len > 0 {
+        let data: &[u8] =
+            std::slice::from_raw_parts(sa.sdl_data.as_ptr() as *const u8, len);
+        name = String::from_utf8_lossy(data).to_string();
+    }
+
+    let off = std::mem::size_of::<sockaddr_dl>();
+    (Some(SocketDlAddr { index, name }), &buf[off..])
 }
 
 unsafe fn get_addr_element(
@@ -200,8 +230,11 @@ unsafe fn get_addr_element(
 pub fn get_routes() -> Result<Vec<Route>, Error> {
     let mut sock = Socket::new(Domain::from(AF_ROUTE), Type::RAW, None)?;
 
-    let mut req = rt_msghdr::default();
-    req.addrs |= RTA_DELAY as i32;
+    let req = rt_msghdr {
+        addrs: (RTA_DST | RTA_GATEWAY | RTA_NETMASK | RTA_DELAY | RTA_IFP)
+            as i32,
+        ..Default::default()
+    };
     let req_data = unsafe {
         std::slice::from_raw_parts(
             (&req as *const rt_msghdr) as *const u8,
@@ -244,12 +277,17 @@ pub fn get_routes() -> Result<Vec<Route>, Error> {
             None => continue,
         };
         let delay = msg.delay.unwrap_or(0);
+        let ifx = match msg.ifp {
+            Some(ifp) => Some(ifp.name.clone()),
+            None => None,
+        };
 
         let r = Route {
             dest,
             mask,
             gw,
             delay,
+            ifx,
         };
         result.push(r);
     }
