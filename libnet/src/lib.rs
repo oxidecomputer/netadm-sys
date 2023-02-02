@@ -1,5 +1,7 @@
 // Copyright 2021 Oxide Computer Company
 
+#![allow(clippy::uninlined_format_args)]
+
 use colored::*;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
