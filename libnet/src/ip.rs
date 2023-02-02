@@ -86,19 +86,14 @@ pub const LIFNAMSIZ: u32 = 32;
 pub const IPADM_AOBJ_USTRSIZ: u32 = 32;
 pub const IPADM_AOBJSIZ: u32 = LIFNAMSIZ + IPADM_AOBJ_USTRSIZ;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone)]
 #[repr(i32)]
 pub enum AddrType {
+    #[default]
     AddrNone,
     Static,
     Ipv6Addrconf,
     Dhcp,
-}
-
-impl Default for AddrType {
-    fn default() -> Self {
-        AddrType::AddrNone
-    }
 }
 
 #[repr(C)]
