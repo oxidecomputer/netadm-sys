@@ -167,6 +167,10 @@ unsafe fn get_dladdr_element(
     if ((*hdr).addrs & rta) == 0 {
         return (None, buf);
     }
+    let off = std::mem::size_of::<sockaddr_dl>();
+    if buf.len() < off {
+        return (None, buf);
+    }
 
     let sa = &*(buf.as_ptr() as *mut sockaddr_dl);
     let index = sa.sdl_index;
@@ -178,7 +182,6 @@ unsafe fn get_dladdr_element(
         name = String::from_utf8_lossy(data).to_string();
     }
 
-    let off = std::mem::size_of::<sockaddr_dl>();
     (Some(SocketDlAddr { index, name }), &buf[off..])
 }
 
@@ -210,6 +213,9 @@ unsafe fn get_addr_element(
         libc::AF_INET6 => {
             let dst = dst as *const sockaddr_in6;
             let off = std::mem::size_of::<sockaddr_in6>();
+            if buf.len() < off {
+                return (None, buf);
+            }
             (
                 Some(
                     SocketAddrV6::new(
