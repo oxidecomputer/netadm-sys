@@ -8,7 +8,6 @@
 #![allow(improper_ctypes)]
 #![allow(dead_code)]
 #![allow(deref_nullptr)]
-#![allow(unaligned_references)]
 
 use libc::{in6_addr, sockaddr_in6, sockaddr_storage};
 
