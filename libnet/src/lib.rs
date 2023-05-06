@@ -1,5 +1,7 @@
 // Copyright 2021 Oxide Computer Company
 
+#![allow(clippy::uninlined_format_args)]
+
 use colored::*;
 use num_enum::TryFromPrimitiveError;
 use std::collections::BTreeMap;
@@ -23,11 +25,13 @@ pub mod link;
 /// state.
 pub mod route;
 
+/// System-level machinery
+pub mod sys;
+
 mod ioctl;
 mod kstat;
 mod ndpd;
 mod nvlist;
-mod sys;
 
 /// Error variants returned by netadm_sys.
 #[derive(thiserror::Error, Debug)]
@@ -106,7 +110,7 @@ pub enum LinkClass {
     IPtun = 0x80,
     Part = 0x100,
     Overlay = 0x200,
-    Xde = 0x400,
+    Misc = 0x400,
     Tfport = 0x800,
     All = 0xfff,
 }
@@ -123,7 +127,7 @@ impl Display for LinkClass {
             LinkClass::Bridge => write!(f, "bridge"),
             LinkClass::IPtun => write!(f, "iptun"),
             LinkClass::Part => write!(f, "part"),
-            LinkClass::Xde => write!(f, "xde"),
+            LinkClass::Misc => write!(f, "misc"),
             LinkClass::Overlay => write!(f, "overlay"),
             LinkClass::Tfport => write!(f, "tfport"),
             LinkClass::All => write!(f, "all"),
@@ -164,6 +168,7 @@ pub struct LinkInfo {
     pub class: LinkClass,
     pub state: LinkState,
     pub mac: [u8; 6],
+    pub mtu: Option<u32>,
     pub over: u32,
 }
 
@@ -302,9 +307,10 @@ pub fn get_tfport_info(link: &LinkHandle) -> Result<TfportInfo, Error> {
 pub fn create_vnic_link(
     name: &str,
     link: &LinkHandle,
+    mac: Option<Vec<u8>>,
     flags: LinkFlags,
 ) -> Result<LinkInfo, Error> {
-    crate::link::create_vnic_link(name, link.id()?, flags)
+    crate::link::create_vnic_link(name, link.id()?, mac, flags)
 }
 
 /// Delete a data link identified by `handle`.

@@ -196,6 +196,14 @@ pub(crate) fn get_link(id: u32) -> Result<LinkInfo, Error> {
         }
     };
 
+    let mtu = match crate::ioctl::get_mtu(id) {
+        Ok(mtu) => Some(mtu),
+        Err(e) => {
+            warn!("error fetching mtu on linkid {}: {}", id, e);
+            None
+        }
+    };
+
     let over = match response.class {
         LinkClass::Simnet => match crate::ioctl::get_simnet_info(id) {
             Ok(info) => info.peer_link_id,
@@ -224,6 +232,7 @@ pub(crate) fn get_link(id: u32) -> Result<LinkInfo, Error> {
     Ok(LinkInfo {
         id,
         mac,
+        mtu,
         over,
         name: name.to_string(),
         flags: response.flags,
@@ -442,10 +451,11 @@ pub(crate) fn create_tfport_link(
 pub fn create_vnic_link(
     name: &str,
     link: u32,
+    mac: Option<Vec<u8>>,
     flags: LinkFlags,
 ) -> Result<LinkInfo, Error> {
     let id = crate::link::create_link_id(name, LinkClass::Vnic, flags)?;
-    let link_info = match crate::ioctl::create_vnic(id, link) {
+    let link_info = match crate::ioctl::create_vnic(id, link, mac) {
         Ok(l) => Ok(l),
         Err(e) => {
             let _ = delete_link_id(id, flags);
@@ -460,6 +470,7 @@ pub fn create_vnic_link(
     Ok(link_info)
 }
 
+#[repr(C)]
 pub struct DlmgmtGetLinkId {
     pub cmd: DlmgmtCmd,
     pub name: [u8; crate::sys::MAXLINKNAMELEN as usize],
