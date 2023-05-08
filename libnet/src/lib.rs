@@ -370,7 +370,7 @@ impl IpInfo {
     /// Get the address object associated with this IP address.
     ///
     /// The return value is a tuple of the form (name, kind). Name is an illumos
-    /// address object name of the form <link-name>/<address-name> and kind is
+    /// address object name of the form `link-name`/`address-name` and kind is
     /// the kind of address such as static, dhcp, etc.
     pub fn obj(&self) -> Result<(String, String), Error> {
         match crate::ip::ifname_to_addrobj(&self.ifname, self.family) {

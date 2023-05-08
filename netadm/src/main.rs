@@ -1,7 +1,7 @@
-// Copyright 2021 Oxide Computer Company
+// Copyright 2023 Oxide Computer Company
 
 use anyhow::{anyhow, Result};
-use clap::{AppSettings, Parser};
+use clap::{Parser, ValueEnum};
 use colored::*;
 use libnet::{
     self, add_route, create_ipaddr, create_simnet_link, create_tfport_link,
@@ -18,12 +18,13 @@ use tracing_subscriber::{self, EnvFilter};
 #[derive(Parser)]
 #[clap(
     version = "0.1",
-    author = "Ryan Goodfellow <ryan.goodfellow@oxide.computer>"
+    author = "Ryan Goodfellow <ryan.goodfellow@oxide.computer>",
+    styles = get_styles()
 )]
-#[clap(setting = AppSettings::InferSubcommands)]
+#[clap(infer_subcommands(true))]
 struct Opts {
-    #[clap(short, long, parse(from_occurrences))]
-    verbose: i32,
+    #[clap(short, long)]
+    verbose: bool,
 
     #[clap(subcommand)]
     subcmd: SubCommand,
@@ -44,209 +45,178 @@ enum SubCommand {
 }
 
 #[derive(Parser)]
-#[clap(setting = AppSettings::InferSubcommands)]
 struct Show {
     #[clap(subcommand)]
     subcmd: ShowSubCommand,
 }
 
 #[derive(Parser)]
-#[clap(setting = AppSettings::InferSubcommands)]
 struct Create {
     #[clap(subcommand)]
     subcmd: CreateSubCommand,
 }
 
 #[derive(Parser)]
-#[clap(setting = AppSettings::InferSubcommands)]
 struct Enable {
     #[clap(subcommand)]
     subcmd: EnableSubCommand,
 }
 
 #[derive(Parser)]
-#[clap(setting = AppSettings::InferSubcommands)]
 struct Delete {
     #[clap(subcommand)]
     subcmd: DeleteSubCommand,
 }
 
 #[derive(Parser)]
-#[clap(setting = AppSettings::InferSubcommands)]
 struct SimnetConnect {
-    #[clap(about = "simnet link-id or name")]
+    /// Simnet link-id or name
     sim_a: LinkHandle,
-    #[clap(about = "simnet link-id or name")]
+    /// Simnet link-id or name
     sim_b: LinkHandle,
 }
 
 #[derive(Parser)]
 enum ShowSubCommand {
-    #[clap(about = "show link-layer interfaces")]
+    /// Show link-layer interfaces
     Links(ShowLinks),
-    #[clap(about = "show network-layer addresses")]
+    /// Show network-layer addresses
     Addrs(ShowAddrs),
-    #[clap(about = "show routes")]
+    /// Show routes
     Routes(ShowRoutes),
-    #[clap(about = "show neighbor")]
+    /// Show neighbor
     Neighbor(ShowNeighbor),
 }
 
 #[derive(Parser)]
 enum CreateSubCommand {
-    #[clap(about = "create a simnet interface")]
+    /// Create a simnet interface
     Simnet(CreateSimnet),
-    #[clap(about = "create a tfport interface")]
+    /// Create a tfport interface
     Tfport(CreateTfport),
-    #[clap(about = "create a vnic interface")]
+    /// Create a vnic interface
     Vnic(CreateVnic),
-    #[clap(about = "create an ip address")]
+    /// Create an ip address
     Addr(CreateAddr),
-    #[clap(about = "create a route")]
+    /// create a route
     Route(CreateRoute),
 }
 
 #[derive(Parser)]
-#[clap(setting = AppSettings::InferSubcommands)]
 enum EnableSubCommand {
-    #[clap(about = "Enable IPv4 network functions")]
+    /// Enable IPv4 network functions
     V4(EnableV4Subcommand),
-    #[clap(about = "Enable IPv6 network functions")]
+    /// Enable IPv6 network functions
     V6(EnableV6Subcommand),
 }
 
 /// Enable IPv6 network functions.
 #[derive(Parser)]
-#[clap(setting = AppSettings::InferSubcommands)]
 struct EnableV6Subcommand {
-    #[clap(about = "available functions: link-local (or ll), or dhcp")]
-    function: V6Function,
-    #[clap(about = "interface name")]
+    /// Mode
+    function: V6Mode,
+    /// Interface name
     interface: String,
-    #[clap(about = "address name")]
+    /// Address name
     addr_name: String,
 }
 
 /// Enable IPv4 network functions.
 #[derive(Parser)]
-#[clap(setting = AppSettings::InferSubcommands)]
 struct EnableV4Subcommand {
-    #[clap(about = "available functions: dhcp")]
-    function: V4Function,
-    #[clap(about = "interface name")]
+    /// Mode
+    function: V4Mode,
+    /// Interface name
     interface: String,
 }
 
-#[derive(Parser)]
-enum V6Function {
+#[derive(Parser, Copy, Clone, ValueEnum)]
+enum V6Mode {
     LinkLocal,
     Dhcp,
 }
 
-impl std::str::FromStr for V6Function {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "link-local" => Ok(V6Function::LinkLocal),
-            "ll" => Ok(V6Function::LinkLocal),
-            "dhcp" => Ok(V6Function::Dhcp),
-            _ => Err(anyhow!("V6 function must be link-local, ll or dhcp")),
-        }
-    }
-}
-
-impl std::str::FromStr for V4Function {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "dhcp" => Ok(V4Function::Dhcp),
-            _ => Err(anyhow!("V4 function must be dhcp")),
-        }
-    }
-}
-
-#[derive(Parser)]
-enum V4Function {
+#[derive(Parser, Copy, Clone, ValueEnum)]
+enum V4Mode {
     Dhcp,
 }
 
 #[derive(Parser)]
 enum DeleteSubCommand {
-    #[clap(about = "delete a link-layer interface")]
+    /// Delete a link-layer interface
     Link(DeleteLink),
-    #[clap(about = "delete an ip address")]
+    /// Delete an ip address
     Addr(DeleteAddr),
-    #[clap(about = "delete a route")]
+    /// Delete a route
     Route(DeleteRoute),
 }
 
 #[derive(Parser)]
 struct CreateSimnet {
-    #[clap(about = "name for the new link")]
+    /// Name for the new link
     name: String,
 }
 
 #[derive(Parser)]
 struct CreateTfport {
-    #[clap(about = "name for the new link")]
+    /// Name for the new link
     name: String,
-    #[clap(about = "tofino port")]
+    /// Tofino port
     port: u16,
-    #[clap(about = "source of sidecar packets")]
+    /// Source of sidecar packets
     over: String,
-    #[clap(about = "MAC address for the new link")]
+    /// MAC address for the new link
     mac: Option<String>,
 }
 
 #[derive(Parser)]
 struct CreateVnic {
-    #[clap(about = "name for the new link")]
+    /// Name for the new link
     name: String,
-    #[clap(about = "simnet link-id or name")]
+    /// Simnet link-id or name
     link: LinkHandle,
-    #[clap(short, long, about = "mac address")]
+    /// Mac address
+    #[clap(short, long)]
     mac: Option<String>,
 }
 
 #[derive(Parser)]
 struct CreateAddr {
-    #[clap(about = "name for the new address")]
+    /// Name for the new address
     name: String,
-    #[clap(about = "address to create")]
+    /// Address to create
     addr: IpPrefix,
 }
 
 #[derive(Parser)]
 struct CreateRoute {
-    #[clap(about = "route destination")]
+    /// Route destination
     destination: IpPrefix,
-    #[clap(about = "route gateway")]
+    /// Route gateway
     gateway: IpAddr,
-    #[clap(about = "route interface")]
+    /// Route interface
     interface: Option<String>,
 }
 
 #[derive(Parser)]
 struct DeleteRoute {
-    #[clap(about = "route destination")]
+    /// Route destination
     destination: IpPrefix,
-    #[clap(about = "route gateway")]
+    /// Route gateway
     gateway: IpAddr,
-    #[clap(about = "route interface")]
+    /// Route interface
     interface: Option<String>,
 }
 
 #[derive(Parser)]
 struct DeleteLink {
-    #[clap(about = "link-id or name")]
+    /// Link-id or name
     handle: LinkHandle,
 }
 
 #[derive(Parser)]
 struct DeleteAddr {
-    #[clap(about = "address name")]
+    /// Address name
     name: String,
 }
 
@@ -255,7 +225,8 @@ struct ShowLinks {}
 
 #[derive(Parser)]
 struct ShowAddrs {
-    #[clap(short, long, about = "restrict to the provided interface name")]
+    /// Restrict to the provided interface name
+    #[clap(short, long)]
     name: Option<String>,
 }
 
@@ -715,4 +686,26 @@ fn color_state(state: &IpState) -> String {
             format!("{}", "inaccessible".to_string().red())
         }
     }
+}
+
+pub fn get_styles() -> clap::builder::Styles {
+    clap::builder::Styles::styled()
+        .header(anstyle::Style::new().bold().underline().fg_color(Some(
+            anstyle::Color::Rgb(anstyle::RgbColor(245, 207, 101)),
+        )))
+        .literal(anstyle::Style::new().bold().fg_color(Some(
+            anstyle::Color::Rgb(anstyle::RgbColor(72, 213, 151)),
+        )))
+        .invalid(anstyle::Style::new().bold().fg_color(Some(
+            anstyle::Color::Rgb(anstyle::RgbColor(72, 213, 151)),
+        )))
+        .valid(anstyle::Style::new().bold().fg_color(Some(
+            anstyle::Color::Rgb(anstyle::RgbColor(72, 213, 151)),
+        )))
+        .usage(anstyle::Style::new().bold().fg_color(Some(
+            anstyle::Color::Rgb(anstyle::RgbColor(245, 207, 101)),
+        )))
+        .error(anstyle::Style::new().bold().fg_color(Some(
+            anstyle::Color::Rgb(anstyle::RgbColor(232, 104, 134)),
+        )))
 }

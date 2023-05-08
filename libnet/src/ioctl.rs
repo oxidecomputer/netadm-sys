@@ -1,5 +1,4 @@
 // Copyright 2021 Oxide Computer Company
-#![allow(clippy::unnecessary_cast)]
 
 use crate::ip::{self, addrobjname_to_addrobj};
 use crate::ndpd::disable_autoconf;
