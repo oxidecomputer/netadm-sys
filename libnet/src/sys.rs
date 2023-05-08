@@ -8,7 +8,6 @@
 #![allow(improper_ctypes)]
 #![allow(dead_code)]
 #![allow(deref_nullptr)]
-#![allow(unaligned_references)]
 
 use libc::{in6_addr, sockaddr_in6, sockaddr_storage};
 
@@ -271,6 +270,7 @@ pub const SIOCGLIFNUM: ioc_t = IOWR!('i', 130, lifnum) as ioc_t;
 pub const SIOCGLIFMUXID: ioc_t = IOWR!('i', 131, lifreq) as ioc_t;
 pub const SIOCSLIFMUXID: ioc_t = IOW!('i', 132, lifreq) as ioc_t;
 pub const SIOCGLIFINDEX: ioc_t = IOWR!('i', 133, lifreq) as ioc_t;
+pub const SIOCLIFGETND: ioc_t = IOWR!('i', 142, lifreq) as ioc_t;
 pub const SIOCGLIFCONF: ioc_t = IOWRN!('i', 165, 16) as ioc_t;
 pub const SIOCGLIFDADSTATE: ioc_t = IOWR!('i', 190, lifreq) as ioc_t;
 pub const SIOCSLIFPREFIX: ioc_t = IOWR!('i', 191, lifreq) as ioc_t;
@@ -1123,6 +1123,7 @@ pub const RTA_IFA: u32 = 0x20;
 pub const RTA_AUTHOR: u32 = 0x40;
 pub const RTA_BRD: u32 = 0x80;
 pub const RTA_SRC: u32 = 0x100;
+pub const RTA_DELAY: u32 = 0x200;
 
 pub const RTF_UP: u32 = 0x1; /* route usable */
 pub const RTF_GATEWAY: u32 = 0x2; /* destination is a gateway */
@@ -1193,3 +1194,11 @@ pub enum IpadmStatusT {
     Ebade,              /* Invalid data exchange with ipmgmtd */
     GzPerm,             /* Operation not permitted on from-gz intf */
 }
+
+pub const NDF_ISROUTER_ON: i32 = 0x1;
+pub const NDF_ISROUTER_off: i32 = 0x2;
+pub const NDF_ANYCAST_ON: i32 = 0x4;
+pub const NDF_ANYCAST_OFF: i32 = 0x8;
+pub const NDF_PROXY_ON: i32 = 0x10;
+pub const NDF_PROXY_OFF: i32 = 0x20;
+pub const NDF_STATIC: i32 = 0x40;

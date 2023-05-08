@@ -1,5 +1,4 @@
 // Copyright 2021 Oxide Computer Company
-#![allow(clippy::unnecessary_cast)]
 
 use crate::ip::{self, addrobjname_to_addrobj};
 use crate::ndpd::disable_autoconf;
@@ -13,9 +12,11 @@ use libc::{free, malloc};
 use libc::{
     sockaddr_in, sockaddr_in6, sockaddr_storage, AF_INET, AF_INET6, AF_UNSPEC,
 };
+use num_enum::TryFromPrimitive;
 use rusty_doors::{door_call_slice, door_callp};
 use socket2::{Domain, Socket, Type};
 use std::collections::BTreeMap;
+use std::convert::TryFrom;
 use std::ffi::CStr;
 use std::fs::File;
 use std::mem::size_of;
@@ -699,7 +700,7 @@ fn is_plumbed_for_af(name: &str, sock: &Socket) -> bool {
     unsafe { matches!(rioctl!(sock, sys::SIOCGLIFFLAGS, &req), Ok(_)) }
 }
 
-fn plumb_for_af(name: &str, ifflags: u64) -> Result<(), Error> {
+fn plumb_for_af(name: &str, mut ifflags: u64) -> Result<(), Error> {
     // TODO not handling interfaces assigned to different zones correctly.
     // TODO not handling loopback as special case like libipadm does
 
@@ -727,7 +728,9 @@ fn plumb_for_af(name: &str, ifflags: u64) -> Result<(), Error> {
     let spec = parse_ifspec(name);
 
     // create the new interface via SIOCSLIFNAME
-    let ifflags = ifflags | sys::IFF_NOLINKLOCAL;
+    if (ifflags & (sys::IFF_IPV6 as u64)) != 0 {
+        ifflags |= sys::IFF_NOLINKLOCAL;
+    };
     let mut req = sys::lifreq::new();
     req.lifr_lifru.lifru_flags = ifflags;
     req.lifr_lifru1.lifru_ppa = spec.ppa;
@@ -739,6 +742,7 @@ fn plumb_for_af(name: &str, ifflags: u64) -> Result<(), Error> {
 
     // get flags for the interface
     unsafe { ioctl!(ip_fd, sys::SIOCGLIFFLAGS, &req)? };
+    ifflags = unsafe { req.lifr_lifru.lifru_flags };
 
     let mux_fd = if (ifflags & (sys::IFF_IPV6 as u64)) != 0 {
         File::open("/dev/udp6")?
@@ -792,10 +796,18 @@ fn plumb_for_af(name: &str, ifflags: u64) -> Result<(), Error> {
         }
     };
 
+    unsafe { rioctl!(arp_fd, sys::I_PUSH, arp_mod_name)? };
+
+    let mut req = sys::lifreq::new();
+    req.lifr_lifru.lifru_flags = ifflags;
+    req.lifr_lifru1.lifru_ppa = spec.ppa;
+    for (i, c) in name.chars().enumerate() {
+        req.lifr_name[i] = c as c_char;
+    }
     let arg = &mut req as *mut sys::lifreq as *mut c_char;
     str_ioctl(
         arp_fd,
-        sys::SIOCSLIFNAME as i32,
+        sys::SIOCSLIFNAME,
         arg,
         size_of::<sys::lifreq>() as c_int,
     )?;
@@ -883,6 +895,7 @@ fn str_ioctl(
 ) -> Result<c_int, Error> {
     let mut ioc = sys::strioctl::new();
     ioc.ic_cmd = cmd;
+    ioc.ic_timeout = 0;
     ioc.ic_len = buflen;
     ioc.ic_dp = buf;
 
@@ -1075,7 +1088,7 @@ pub fn create_ip_addr_linklocal(
     for (i, c) in ifname.chars().enumerate() {
         req.lifr_name[i] = c as c_char;
     }
-    let (lifnum, kernel_ifname) = create_logical_interface(sock, &req)?;
+    let (lifnum, kernel_ifname) = create_logical_interface_v6(sock, &req)?;
 
     let ll_template = [0xfe, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
@@ -1135,8 +1148,7 @@ pub fn create_ip_addr_linklocal(
     Ok(())
 }
 
-// TODO only considering ipv6
-fn create_logical_interface(
+fn create_logical_interface_v6(
     sock: &Socket,
     req: &sys::lifreq,
 ) -> Result<(i32, String), Error> {
@@ -1149,6 +1161,27 @@ fn create_logical_interface(
         // if addr is not unspecified, this logical interface is taken, create
         // a new one.
         if (*sin6).sin6_addr.s6_addr != [0u8; 16] {
+            rioctl!(sock, sys::SIOCLIFADDIF, req)?;
+        }
+
+        let (kname, lifnum) = parse_ifname(req)?;
+        Ok((lifnum, kname.into()))
+    }
+}
+
+fn create_logical_interface_v4(
+    sock: &Socket,
+    req: &sys::lifreq,
+) -> Result<(i32, String), Error> {
+    unsafe {
+        // first check if the 0th logical interface has an address
+        rioctl!(sock, sys::SIOCGLIFADDR, req)?;
+        let sin4 = &req.lifr_lifru.lifru_addr as *const sockaddr_storage
+            as *const sockaddr_in;
+
+        // if addr is not unspecified, this logical interface is taken, create
+        // a new one.
+        if (*sin4).sin_addr.s_addr != 0 {
             rioctl!(sock, sys::SIOCLIFADDIF, req)?;
         }
 
@@ -1183,7 +1216,14 @@ pub(crate) fn create_ip_addr_static(
             req.lifr_name[i] = c as c_char;
         }
 
-        create_logical_interface(sock, &req)?;
+        match addr {
+            IpPrefix::V6(_) => {
+                create_logical_interface_v6(sock, &req)?;
+            }
+            IpPrefix::V4(_) => {
+                create_logical_interface_v4(sock, &req)?;
+            }
+        }
 
         // assign addr
         match addr {
@@ -1195,8 +1235,12 @@ pub(crate) fn create_ip_addr_static(
                 let sa6 = sas as *mut sockaddr_in6;
                 (*sa6).sin6_addr.s6_addr = a.addr.octets();
             }
-            IpPrefix::V4(_) => {
+            IpPrefix::V4(a) => {
                 req.lifr_lifru.lifru_addr.ss_family = AF_INET as u16;
+                let sas =
+                    &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage;
+                let sa4 = sas as *mut sockaddr_in;
+                (*sa4).sin_addr.s_addr = Into::<u32>::into(a.addr).to_be();
             }
         };
         rioctl!(sock, sys::SIOCSLIFADDR, &req)?;
@@ -1215,8 +1259,17 @@ pub(crate) fn create_ip_addr_static(
                 }
                 (*sa6).sin6_addr.s6_addr = Ipv6Addr::from(addr).octets();
             }
-            IpPrefix::V4(_) => {
+            IpPrefix::V4(a) => {
                 req.lifr_lifru.lifru_addr.ss_family = AF_INET as u16;
+                let sas =
+                    &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage;
+
+                let sa4 = sas as *mut sockaddr_in;
+                let mut addr: u32 = 0;
+                for i in 0..a.mask {
+                    addr |= 1 << i;
+                }
+                (*sa4).sin_addr.s_addr = addr;
             }
         };
         rioctl!(sock, sys::SIOCSLIFNETMASK, &req)?;
@@ -1241,7 +1294,6 @@ pub(crate) fn create_ip_addr_static(
         )?;
 
         // set up
-
         let mut req: sys::lifreq = std::mem::zeroed();
         for (i, c) in kernel_ifname.chars().enumerate() {
             req.lifr_name[i] = c as c_char;
@@ -1695,4 +1747,83 @@ pub(crate) fn delete_vnic(id: u32) -> Result<(), Error> {
         rioctl!(fd.as_raw_fd(), sys::VNIC_IOC_DELETE, &arg)?;
     }
     Ok(())
+}
+
+#[derive(Debug)]
+pub struct Neighbor {
+    pub state: NeighborState,
+    pub l2_addr: Vec<i8>,
+    pub flags: i32,
+}
+
+impl Neighbor {
+    pub fn is_router(&self) -> bool {
+        (self.flags & sys::NDF_ISROUTER_ON) != 0
+    }
+    pub fn is_anycast(&self) -> bool {
+        (self.flags & sys::NDF_ANYCAST_ON) != 0
+    }
+    pub fn is_proxy(&self) -> bool {
+        (self.flags & sys::NDF_PROXY_ON) != 0
+    }
+    pub fn is_static(&self) -> bool {
+        (self.flags & sys::NDF_STATIC) != 0
+    }
+}
+
+#[derive(TryFromPrimitive, Debug)]
+#[repr(u8)]
+pub enum NeighborState {
+    Unchanged,
+    Incomplete,
+    Reachable,
+    Stale,
+    Delay,
+    Probe,
+    Unreachable,
+}
+
+pub fn get_neighbor(ifname: &str, addr: Ipv6Addr) -> Result<Neighbor, Error> {
+    let mut ior: sys::lifreq = unsafe { std::mem::zeroed() };
+    let mut lifru_nd_req: sys::lif_nd_req = unsafe { std::mem::zeroed() };
+    for (i, b) in ifname.bytes().enumerate() {
+        ior.lifr_name[i] = b as i8;
+    }
+
+    let sin6 = &mut lifru_nd_req.lnr_addr as *mut sockaddr_storage
+        as *mut sockaddr_in6;
+    unsafe {
+        (*sin6).sin6_family = AF_INET6 as u16;
+        (*sin6).sin6_addr.s6_addr = addr.octets();
+    }
+
+    ior.lifr_lifru = sys::lifreq_ru { lifru_nd_req };
+
+    let sock = Socket::new(Domain::IPV6, Type::DGRAM, None)?;
+
+    unsafe { rioctl!(sock, sys::SIOCLIFGETND, &ior)? };
+
+    Ok(Neighbor {
+        state: NeighborState::try_from(unsafe {
+            ior.lifr_lifru.lifru_nd_req.lnr_state_create
+        })?,
+        l2_addr: unsafe { ior.lifr_lifru.lifru_nd_req.lnr_hdw_addr.to_vec() },
+        flags: unsafe { ior.lifr_lifru.lifru_nd_req.lnr_flags },
+    })
+}
+
+pub fn get_ifnum(ifname: &str, af: u16) -> Result<i32, Error> {
+    let s = match af as i32 {
+        AF_INET => Socket::new(Domain::IPV4, Type::DGRAM, None)?,
+        AF_INET6 => Socket::new(Domain::IPV6, Type::DGRAM, None)?,
+        _ => return Err(Error::BadArgument("unknown address family".into())),
+    };
+    let mut ior: sys::lifreq = unsafe { std::mem::zeroed() };
+    for (i, b) in ifname.as_bytes().iter().enumerate() {
+        ior.lifr_name[i] = *b as i8;
+    }
+    unsafe {
+        rioctl!(s, sys::SIOCGLIFINDEX, &ior)?;
+    }
+    Ok(unsafe { ior.lifr_lifru.lifru_index })
 }

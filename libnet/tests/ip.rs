@@ -59,7 +59,7 @@ fn test_address_consistency() -> Result<()> {
                 continue;
             }
             // this can happen due to races with other tests
-            if name == "" {
+            if name.is_empty() {
                 continue;
             }
 
@@ -109,7 +109,7 @@ fn test_v6_local_lifecycle() -> Result<()> {
         IpAddr::V6(v6) => assert_eq!(v6.segments()[0], 0xfe80),
         _ => panic!("not a v6 addr"),
     }
-    assert_eq!(10, addr.info.mask as u32);
+    assert_eq!(10, addr.info.mask);
 
     drop(addr);
 

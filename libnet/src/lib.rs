@@ -3,6 +3,7 @@
 #![allow(clippy::uninlined_format_args)]
 
 use colored::*;
+use num_enum::TryFromPrimitiveError;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::net::IpAddr;
@@ -63,6 +64,8 @@ pub enum Error {
     Route(#[from] route::Error),
     #[error("ndp error: {0}")]
     Ndp(String),
+    #[error("unrecognized neighbor state: {0}")]
+    NeighborState(#[from] TryFromPrimitiveError<ioctl::NeighborState>),
 }
 
 // Datalink management --------------------------------------------------------
@@ -367,7 +370,7 @@ impl IpInfo {
     /// Get the address object associated with this IP address.
     ///
     /// The return value is a tuple of the form (name, kind). Name is an illumos
-    /// address object name of the form <link-name>/<address-name> and kind is
+    /// address object name of the form `link-name`/`address-name` and kind is
     /// the kind of address such as static, dhcp, etc.
     pub fn obj(&self) -> Result<(String, String), Error> {
         match crate::ip::ifname_to_addrobj(&self.ifname, self.family) {
@@ -390,6 +393,9 @@ pub fn get_ipaddrs() -> Result<BTreeMap<String, Vec<IpInfo>>, Error> {
 
 /// Get information about a specific IP interface
 pub use crate::ioctl::get_ipaddr_info;
+
+/// Get neighbor information for a particular IP address.
+pub use crate::ioctl::get_neighbor;
 
 /// Create an IP address and give it the provided address object name.
 ///
@@ -428,28 +434,16 @@ pub fn get_routes() -> Result<Vec<crate::route::Route>, Error> {
 }
 
 /// Add a route to `destination` via `gateway`.
-pub fn add_route(destination: IpPrefix, gateway: IpAddr) -> Result<(), Error> {
-    Ok(crate::route::add_route(destination, gateway)?)
-}
+pub use crate::route::add_route;
 
 /// Ensure a route to `destination` via `gateway` is present.
 ///
 /// Same as `add_route` except no error is returned if the route already exists
 /// on the system.
-pub fn ensure_route_present(
-    destination: IpPrefix,
-    gateway: IpAddr,
-) -> Result<(), Error> {
-    Ok(crate::route::ensure_route_present(destination, gateway)?)
-}
+pub use crate::route::ensure_route_present;
 
 /// Delete a route to `destination` via `gateway`.
-pub fn delete_route(
-    destination: IpPrefix,
-    gateway: IpAddr,
-) -> Result<(), Error> {
-    Ok(crate::route::delete_route(destination, gateway)?)
-}
+pub use crate::route::delete_route;
 
 /// An IP prefix is the leading bits of an IP address combined with a prefix
 /// length indicating the number of leading bits that are significant.
@@ -457,6 +451,39 @@ pub fn delete_route(
 pub enum IpPrefix {
     V4(Ipv4Prefix),
     V6(Ipv6Prefix),
+}
+
+impl IpPrefix {
+    pub fn ip(&self) -> IpAddr {
+        match self {
+            Self::V4(p) => p.addr.into(),
+            Self::V6(p) => p.addr.into(),
+        }
+    }
+    pub fn mask(&self) -> u8 {
+        match self {
+            Self::V4(p) => p.mask,
+            Self::V6(p) => p.mask,
+        }
+    }
+    pub fn mask_as_addr(&self) -> IpAddr {
+        match self {
+            Self::V4(p) => {
+                let mut mask: u32 = 0;
+                for i in 0..p.mask {
+                    mask |= 1 << i;
+                }
+                Ipv4Addr::from(mask.to_be()).into()
+            }
+            Self::V6(p) => {
+                let mut mask: u128 = 0;
+                for i in 0..p.mask {
+                    mask |= 1 << i;
+                }
+                Ipv6Addr::from(mask.to_be()).into()
+            }
+        }
+    }
 }
 
 impl FromStr for IpPrefix {
