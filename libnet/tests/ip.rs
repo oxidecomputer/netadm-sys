@@ -41,6 +41,8 @@ fn test_get_addresses() -> Result<()> {
 fn test_address_consistency() -> Result<()> {
     let addrs = get_ipaddrs().expect("get addresses");
 
+    // TODO: this can fail with addrconf addresses that give the same addrobj
+    // anme to multiple addresses.
     for (_, link_addrs) in addrs {
         for addr in link_addrs {
             let (name, _) = addr.obj().expect("address name");
