@@ -315,16 +315,14 @@ pub fn ensure_route_present(
     interface: Option<String>,
 ) -> Result<(), Error> {
     match add_route(destination, gateway, interface) {
-        Ok(_) => Ok(()),
-        Err(Error::SystemError(msg)) => {
-            //TODO this is terrible, include error codes in wrapped errors
-            if msg.contains("exists") {
+        Err(Error::IoError(e)) => {
+            if e.kind() == std::io::ErrorKind::AlreadyExists {
                 Ok(())
             } else {
-                Err(Error::SystemError(msg))
+                Err(Error::IoError(e))
             }
         }
-        Err(e) => Err(e),
+        result => result,
     }
 }
 
