@@ -29,7 +29,7 @@ done
 
 banner check
 cargo fmt -- --check
-cargo clippy -- --deny warnings
+cargo clippy --all-targets -- --deny warnings
 
 banner pre-test
 uname -a
