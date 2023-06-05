@@ -38,6 +38,7 @@ uname -a
 
 banner test
 pfexec ptime -m cargo test
+pfexec ptime -m cargo test --release
 
 banner post-test
 ./target/debug/netadm show links
