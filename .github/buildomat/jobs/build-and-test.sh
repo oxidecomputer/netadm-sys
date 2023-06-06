@@ -29,7 +29,7 @@ done
 
 banner check
 cargo fmt -- --check
-cargo clippy -- --deny warnings
+cargo clippy --all-targets -- --deny warnings
 
 banner pre-test
 uname -a
@@ -38,6 +38,7 @@ uname -a
 
 banner test
 pfexec ptime -m cargo test
+pfexec ptime -m cargo test --release
 
 banner post-test
 ./target/debug/netadm show links
