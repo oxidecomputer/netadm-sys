@@ -433,8 +433,11 @@ pub fn get_routes() -> Result<Vec<crate::route::Route>, Error> {
     Ok(crate::route::get_routes()?)
 }
 
-/// Add a route to `destination` via `gateway`.
+/// Get route information for the provided `destination`
 pub use crate::route::add_route;
+
+/// Add a route to `destination` via `gateway`.
+pub use crate::route::get_route;
 
 /// Ensure a route to `destination` via `gateway` is present.
 ///
@@ -492,7 +495,10 @@ impl FromStr for IpPrefix {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match Ipv6Prefix::from_str(s) {
             Ok(a) => Ok(IpPrefix::V6(a)),
-            _ => Ok(IpPrefix::V4(Ipv4Prefix::from_str(s)?)),
+            _ => match Ipv4Prefix::from_str(s) {
+                Ok(a) => Ok(IpPrefix::V4(a)),
+                Err(_) => Err(Self::Err::Cidr),
+            },
         }
     }
 }
@@ -544,7 +550,10 @@ impl FromStr for Ipv6Prefix {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parts: Vec<&str> = s.split('/').collect();
         if parts.len() < 2 {
-            return Err(IpPrefixParseError::Cidr);
+            return Ok(Ipv6Prefix {
+                addr: Ipv6Addr::from_str(parts[0])?,
+                mask: 0,
+            });
         }
 
         Ok(Ipv6Prefix {
@@ -560,7 +569,10 @@ impl FromStr for Ipv4Prefix {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parts: Vec<&str> = s.split('/').collect();
         if parts.len() < 2 {
-            return Err(IpPrefixParseError::Cidr);
+            return Ok(Ipv4Prefix {
+                addr: Ipv4Addr::from_str(parts[0])?,
+                mask: 0,
+            });
         }
 
         Ok(Ipv4Prefix {

@@ -84,6 +84,8 @@ enum ShowSubCommand {
     Addrs(ShowAddrs),
     /// Show routes
     Routes(ShowRoutes),
+    /// Show a route
+    Route(ShowRoute),
     /// Show neighbor
     Neighbor(ShowNeighbor),
 }
@@ -242,6 +244,12 @@ struct ShowRoutes {
 }
 
 #[derive(Parser)]
+struct ShowRoute {
+    /// The destination to show a route for.
+    destination: IpPrefix,
+}
+
+#[derive(Parser)]
 struct ShowNeighbor {
     /// Name of the interface
     ifname: String,
@@ -268,6 +276,10 @@ fn main() {
                 Err(e) => error!("{}", e),
             },
             ShowSubCommand::Routes(ref r) => match show_routes(&opts, s, r) {
+                Ok(()) => {}
+                Err(e) => error!("{}", e),
+            },
+            ShowSubCommand::Route(ref r) => match show_a_route(&opts, s, r) {
                 Ok(()) => {}
                 Err(e) => error!("{}", e),
             },
@@ -568,6 +580,12 @@ fn show_addrs(_opts: &Opts, _s: &Show, a: &ShowAddrs) -> Result<()> {
 
     tw.flush()?;
 
+    Ok(())
+}
+
+fn show_a_route(_opts: &Opts, _s: &Show, sr: &ShowRoute) -> Result<()> {
+    let route = route::get_route(sr.destination)?;
+    println!("{:#?}", route);
     Ok(())
 }
 
