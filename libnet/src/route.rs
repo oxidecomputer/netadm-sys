@@ -233,6 +233,93 @@ unsafe fn get_addr_element(
     }
 }
 
+pub fn get_route(destination: IpPrefix) -> Result<Route, Error> {
+    let mut sock = Socket::new(Domain::from(AF_ROUTE), Type::RAW, None)?;
+    let mut msglen = size_of::<rt_msghdr>();
+    let flags = match destination {
+        IpPrefix::V4(p) => {
+            if p.mask == 32 {
+                msglen += size_of::<sockaddr_in>();
+                sys::RTF_HOST as i32
+            } else {
+                msglen += size_of::<sockaddr_in>() * 2;
+                0i32
+            }
+        }
+        IpPrefix::V6(p) => {
+            if p.mask == 128 {
+                msglen += size_of::<sockaddr_in6>();
+                sys::RTF_HOST as i32
+            } else {
+                msglen += size_of::<sockaddr_in6>() * 2;
+                0i32
+            }
+        }
+    };
+
+    let mut req = rt_msghdr {
+        addrs: (RTA_DST | RTA_IFP) as i32,
+        typ: sys::RTM_GET as u8,
+        version: sys::RTM_VERSION as u8,
+        pid: std::process::id() as i32,
+        seq: 47, //TODO
+        msglen: msglen as u16,
+        flags,
+        ..Default::default()
+    };
+    if flags == 0 {
+        req.addrs |= RTA_NETMASK as i32;
+    }
+
+    let mut buf: Vec<u8> = Vec::new();
+    buf.extend_from_slice(unsafe {
+        from_raw_parts(
+            (&req as *const rt_msghdr) as *const u8,
+            size_of::<rt_msghdr>(),
+        )
+    });
+    serialize_addr(&mut buf, destination.ip());
+    if flags == 0 {
+        serialize_addr(&mut buf, destination.mask_as_addr());
+    }
+
+    let n = sock.write(&buf)?;
+    if n < buf.len() {
+        return Err(Error::SystemError(format!(
+            "short write: {} < {}",
+            n,
+            buf.len()
+        )));
+    }
+
+    let mut buf: [u8; 10240] = [0; 10240];
+    let n = sock.read(&mut buf)?;
+    let buf = &buf[..n];
+
+    let (msg, _b) = unsafe { read_msg(buf) };
+
+    let dest = msg
+        .dst
+        .ok_or(Error::SystemError("missing destination".into()))?;
+    let mask = msg.mask.ok_or(Error::SystemError("missing mask".into()))?;
+    let gw = msg.gw.ok_or(Error::SystemError("missing gateway".into()))?;
+    let ifx = match msg.ifp {
+        Some(ifp) => Some(ifp.name),
+        None => None,
+    };
+
+    Ok(Route {
+        dest: dest.ip(),
+        mask: match mask {
+            SocketAddr::V4(s) => u32::from(*s.ip()).leading_ones(),
+            SocketAddr::V6(s) => u128::from(*s.ip()).leading_ones(),
+        },
+        gw: gw.ip(),
+        delay: 0,
+        ifx,
+    })
+}
+
 pub fn get_routes() -> Result<Vec<Route>, Error> {
     let mut sock = Socket::new(Domain::from(AF_ROUTE), Type::RAW, None)?;
 
