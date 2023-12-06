@@ -55,16 +55,34 @@ use std::io::{Read, Write};
 use std::mem::size_of;
 use std::slice::from_raw_parts;
 
-use libc::{
-    sockaddr, sockaddr_dl, sockaddr_in, sockaddr_in6, AF_INET, AF_INET6,
-    AF_LINK, AF_ROUTE,
-};
+use libc::{sockaddr, sockaddr_in, sockaddr_in6, AF_INET, AF_INET6, AF_ROUTE};
 
 use socket2::{Domain, Socket, Type};
 use std::net::{
     IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6,
 };
 use thiserror::Error;
+
+// These items are missing from non-illumos platforms (such as Linux).
+// We define them by hand below so that cargo-check/cargo-clippy are still
+// functional when not run on an illumos machine.
+#[cfg(target_os = "illumos")]
+use libc::{sockaddr_dl, AF_LINK};
+
+#[cfg(not(target_os = "illumos"))]
+#[repr(C)]
+struct sockaddr_dl {
+    sdl_family: u16,
+    sdl_index: u16,
+    sdl_type: u8,
+    sdl_nlen: u8,
+    sdl_alen: u8,
+    sdl_slen: u8,
+    sdl_data: [i8; 244],
+}
+
+#[cfg(not(target_os = "illumos"))]
+const AF_LINK: std::os::raw::c_int = 25;
 
 #[derive(Error, Debug)]
 pub enum Error {
