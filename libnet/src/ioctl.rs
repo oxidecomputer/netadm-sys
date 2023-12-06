@@ -22,49 +22,80 @@ use std::fs::File;
 use std::mem::size_of;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::os::raw::{c_char, c_int, c_void};
-use std::os::unix::io::AsRawFd;
+use std::os::unix::io::{AsRawFd, RawFd};
 use std::ptr;
 use tracing::{debug, warn};
 
-// A wrapper to ensure that the argument passed to ioctl is mutable
-unsafe fn wrap_ioctl_rw<T>(
-    fd: impl AsRawFd,
-    req: c_int,
-    data: *mut T,
-) -> c_int {
-    libc::ioctl(fd.as_raw_fd(), req, data)
-}
-
 macro_rules! ioctl {
-    ( $fd:expr, $req:expr, $args:expr ) => {{
-        let fd = $fd.as_raw_fd();
-        match wrap_ioctl_rw(fd, $req, $args) {
-            -1 => Err(Error::Ioctl(format!(
-                "ioctl @{}={} {}: {}",
-                stringify!(fd),
-                fd,
-                stringify!($req),
-                std::io::Error::last_os_error(),
-            ))),
-            x => Ok(x),
-        }
-    }};
+    ($fd:expr, $req:expr, $arg:expr) => {
+        ioctl($fd.as_raw_fd(), ($req) as i32, $arg, stringify!($req))
+    };
 }
 
 macro_rules! ioctl_ro {
-    ( $fd:expr, $req:expr $(, $args:expr)? ) => {{
-        let fd = $fd.as_raw_fd();
-        match libc::ioctl(fd, $req $(, $args)?) {
-            -1 => Err(Error::Ioctl(format!(
-                "ioctl @{}={} {}: {}",
-                stringify!(fd),
-                fd,
-                stringify!($req),
-                std::io::Error::last_os_error(),
-            ))),
-            x => Ok(x),
-        }
-    }};
+    ($fd:expr, $req:expr, $arg:expr) => {
+        ioctl_ro($fd.as_raw_fd(), ($req) as i32, $arg, stringify!($req))
+    };
+}
+
+macro_rules! ioctl_num {
+    ($fd:expr, $req:expr) => {
+        ioctl(
+            $fd.as_raw_fd(),
+            ($req) as i32,
+            ptr::null_mut::<c_void>(),
+            stringify!($req),
+        )
+    };
+    ($fd:expr, $req:expr, $arg:expr) => {
+        ioctl(
+            $fd.as_raw_fd(),
+            ($req) as i32,
+            ($arg) as usize as *mut c_void,
+            stringify!($req),
+        )
+    };
+}
+
+unsafe fn ioctl_ro<T: ?Sized>(
+    fd: RawFd,
+    cmd: i32,
+    data: *const T,
+    cmd_str: &'static str,
+) -> Result<i32, Error> {
+    ioctl(fd, cmd, data as *mut T, cmd_str)
+}
+
+#[cfg(target_os = "illumos")]
+unsafe fn ioctl<T: ?Sized>(
+    fd: RawFd,
+    cmd: i32,
+    data: *mut T,
+    cmd_str: &'static str,
+) -> Result<i32, Error> {
+    match libc::ioctl(fd, cmd, data as *mut c_void) {
+        -1 => Err(Error::Ioctl(format!(
+            "ioctl({fd}, {cmd_str}): {}",
+            std::io::Error::last_os_error(),
+        ))),
+        other => Ok(other),
+    }
+}
+
+#[cfg(not(target_os = "illumos"))]
+unsafe fn ioctl<T: ?Sized>(
+    fd: RawFd,
+    _cmd: i32,
+    _data: *mut T,
+    cmd_str: &'static str,
+) -> Result<i32, Error> {
+    // Because these ioctls are meaningless on non-illumos targets, and the
+    // argument types for the illumos ioctl() differ from other platforms, we
+    // toss an error here, assuming that anyone attempting to run this on
+    // non-illumos is mistaken about the situation.
+    Err(Error::Ioctl(format!(
+        "ioctl({fd}, {cmd_str}): illumos required"
+    )))
 }
 
 #[repr(C)]
@@ -399,7 +430,7 @@ pub(crate) fn get_vnic_info(link_id: u32) -> Result<VnicInfoIoc, Error> {
             vnic_id: link_id,
             ..Default::default()
         };
-        ioctl!(fd.as_raw_fd(), sys::VNIC_IOC_INFO, &mut arg)?;
+        ioctl!(fd, sys::VNIC_IOC_INFO, &mut arg)?;
         Ok(arg)
     }
 }
@@ -424,7 +455,7 @@ pub(crate) fn get_macaddr(linkid: u32) -> Result<[u8; 6], Error> {
             },
         };
 
-        ioctl!(fd.as_raw_fd(), DLDIOC_MACADDRGET, &mut arg)?;
+        ioctl!(fd, DLDIOC_MACADDRGET, &mut arg)?;
 
         let mut res: [u8; 6] = [0; 6];
         res[..6].clone_from_slice(&arg.info.dmi_addr[..6]);
@@ -448,7 +479,7 @@ pub(crate) fn get_mtu(linkid: u32) -> Result<u32, Error> {
     arg.pr_name[..3].copy_from_slice(&b"mtu".map(|u| u as i8));
 
     unsafe {
-        ioctl!(fd.as_raw_fd(), DLDIOC_GETMACPROP, &mut arg)?;
+        ioctl!(fd, DLDIOC_GETMACPROP, &mut arg)?;
     }
 
     Ok(arg.pr_val)
@@ -772,7 +803,7 @@ fn plumb_for_af(name: &str, mut ifflags: u64) -> Result<(), Error> {
 
     // pop off unwanted modules
     loop {
-        if unsafe { ioctl_ro!(mux_fd, sys::I_POP).is_err() } {
+        if unsafe { ioctl_num!(mux_fd, sys::I_POP).is_err() } {
             break;
         }
     }
@@ -784,7 +815,7 @@ fn plumb_for_af(name: &str, mut ifflags: u64) -> Result<(), Error> {
     // check if ARP is not needed
     if (ifflags & ((sys::IFF_NOARP | sys::IFF_IPV6) as u64)) != 0 {
         unsafe {
-            let res = ioctl_ro!(mux_fd, sys::I_PLINK, ip_fd);
+            let res = ioctl_num!(mux_fd, sys::I_PLINK, ip_fd);
 
             return match res {
                 Ok(ip_muxid) => {
@@ -827,20 +858,20 @@ fn plumb_for_af(name: &str, mut ifflags: u64) -> Result<(), Error> {
     let arg = &mut req as *mut sys::lifreq as *mut c_char;
     str_ioctl(
         arp_fd,
-        sys::SIOCSLIFNAME,
+        sys::SIOCSLIFNAME as c_int,
         arg,
         size_of::<sys::lifreq>() as c_int,
     )?;
 
     // plink IP and arp streams
-    let ip_muxid = unsafe { ioctl_ro!(mux_fd, sys::I_PLINK, ip_fd)? };
+    let ip_muxid = unsafe { ioctl_num!(mux_fd, sys::I_PLINK, ip_fd)? };
 
     unsafe {
-        let arp_muxid = match ioctl_ro!(mux_fd, sys::I_PLINK, arp_fd) {
+        let arp_muxid = match ioctl_num!(mux_fd, sys::I_PLINK, arp_fd) {
             Ok(muxid) => muxid,
             Err(e) => {
                 // undo the plink of IP stream
-                if let Err(e) = ioctl_ro!(mux_fd, sys::I_PUNLINK, ip_muxid) {
+                if let Err(e) = ioctl_num!(mux_fd, sys::I_PUNLINK, ip_muxid) {
                     println!("punlink failed: {}", e);
                 }
                 return Err(e);
@@ -884,7 +915,7 @@ fn unplumb_for_af(name: &str, af: i32) -> Result<(), Error> {
 
     // pop off unwanted modules
     loop {
-        if unsafe { ioctl_ro!(mux_fd, sys::I_POP).is_err() } {
+        if unsafe { ioctl_num!(mux_fd, sys::I_POP).is_err() } {
             break;
         }
     }
@@ -895,11 +926,11 @@ fn unplumb_for_af(name: &str, af: i32) -> Result<(), Error> {
 
     unsafe {
         if arp_muxid != 0 && arp_muxid != -1 {
-            if let Err(e) = ioctl_ro!(mux_fd, sys::I_PUNLINK, arp_muxid) {
+            if let Err(e) = ioctl_num!(mux_fd, sys::I_PUNLINK, arp_muxid) {
                 println!("punlink failed: {}", e);
             }
         }
-        if let Err(e) = ioctl_ro!(mux_fd, sys::I_PUNLINK, ip_muxid) {
+        if let Err(e) = ioctl_num!(mux_fd, sys::I_PUNLINK, ip_muxid) {
             println!("punlink failed: {}", e);
         }
     }
@@ -1764,7 +1795,7 @@ pub(crate) fn delete_vnic(id: u32) -> Result<(), Error> {
     unsafe {
         let fd = dld_fd()?;
         let arg = VnicIocDelete { link_id: id };
-        ioctl_ro!(fd.as_raw_fd(), sys::VNIC_IOC_DELETE, &arg)?;
+        ioctl_ro!(fd, sys::VNIC_IOC_DELETE, &arg)?;
     }
     Ok(())
 }
