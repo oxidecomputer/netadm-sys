@@ -51,9 +51,12 @@ use crate::{
     },
     IpPrefix,
 };
-use std::io::{Read, Write};
 use std::mem::size_of;
 use std::slice::from_raw_parts;
+use std::{
+    io::{Read, Write},
+    time::Duration,
+};
 
 use libc::{sockaddr, sockaddr_in, sockaddr_in6, AF_INET, AF_INET6, AF_ROUTE};
 
@@ -251,8 +254,12 @@ unsafe fn get_addr_element(
     }
 }
 
-pub fn get_route(destination: IpPrefix) -> Result<Route, Error> {
+pub fn get_route(
+    destination: IpPrefix,
+    timeout: Option<Duration>,
+) -> Result<Route, Error> {
     let mut sock = Socket::new(Domain::from(AF_ROUTE), Type::RAW, None)?;
+    sock.set_read_timeout(timeout)?;
     let mut msglen = size_of::<rt_msghdr>();
     let flags = match destination {
         IpPrefix::V4(p) => {
@@ -280,7 +287,6 @@ pub fn get_route(destination: IpPrefix) -> Result<Route, Error> {
         typ: sys::RTM_GET as u8,
         version: sys::RTM_VERSION as u8,
         pid: std::process::id() as i32,
-        seq: 47, //TODO
         msglen: msglen as u16,
         flags,
         ..Default::default()
@@ -477,7 +483,6 @@ fn mod_route(
         version: sys::RTM_VERSION as u8,
         addrs,
         pid: std::process::id() as i32,
-        seq: 47, //TODO
         flags,
         ..Default::default()
     };
