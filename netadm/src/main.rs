@@ -584,7 +584,7 @@ fn show_addrs(_opts: &Opts, _s: &Show, a: &ShowAddrs) -> Result<()> {
 }
 
 fn show_a_route(_opts: &Opts, _s: &Show, sr: &ShowRoute) -> Result<()> {
-    let route = route::get_route(sr.destination)?;
+    let route = route::get_route(sr.destination, None)?;
     println!("{:#?}", route);
     Ok(())
 }
