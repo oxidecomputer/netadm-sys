@@ -50,6 +50,15 @@ pub const LIFC_ENABLED: u32 = 32;
 type ioc_t = u64;
 #[cfg(target_os = "illumos")]
 type ioc_t = i32;
+#[cfg(target_os = "macos")]
+type ioc_t = u64;
+
+#[cfg(target_os = "linux")]
+pub type addr_family_t = u16;
+#[cfg(target_os = "illumos")]
+pub type addr_family_t = u16;
+#[cfg(target_os = "macos")]
+pub type addr_family_t = u8;
 
 pub const DLD_IOC: ioc_t = 0x0D1D;
 pub const AGGR_IOC: ioc_t = 0x0A66;
@@ -699,7 +708,9 @@ fn errno_ptr() -> *mut c_int {
             unsafe { libc::___errno() }
         } else if #[cfg(target_os = "linux")] {
             unsafe { libc::__errno_location() }
-        } else {
+        } else if #[cfg(target_os = "macos")] {
+            unsafe { libc::__error() }
+        }else {
             compile_fail!("only linux and illumos are currently supported")
         }
     }

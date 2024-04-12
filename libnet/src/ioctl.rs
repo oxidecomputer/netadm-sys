@@ -3,9 +3,9 @@
 use crate::ip::{self, addrobjname_to_addrobj};
 use crate::ndpd::disable_autoconf;
 use crate::sys::{
-    self, dld_ioc_macaddrget_t, dld_ioc_macprop_t, dld_macaddrinfo_t,
-    mac_prop_id_t_MAC_PROP_MTU, DLDIOC_GETMACPROP, DLDIOC_MACADDRGET,
-    SIMNET_IOC_INFO, SIMNET_IOC_MODIFY,
+    self, addr_family_t, dld_ioc_macaddrget_t, dld_ioc_macprop_t,
+    dld_macaddrinfo_t, mac_prop_id_t_MAC_PROP_MTU, DLDIOC_GETMACPROP,
+    DLDIOC_MACADDRGET, SIMNET_IOC_INFO, SIMNET_IOC_MODIFY,
 };
 use crate::{Error, IpInfo, IpPrefix, IpState, LinkFlags};
 use libc::{free, malloc};
@@ -658,13 +658,13 @@ pub(crate) fn delete_ipaddr(objname: impl AsRef<str>) -> Result<(), Error> {
                 let sin = &mut ior.lifr_lifru.lifru_addr
                     as *mut sockaddr_storage
                     as *mut sockaddr_in;
-                (*sin).sin_family = AF_INET as u16;
+                (*sin).sin_family = AF_INET as addr_family_t;
                 (*sin).sin_addr.s_addr = 0;
             } else if af == libc::AF_INET6 {
                 let sin6 = &mut ior.lifr_lifru.lifru_addr
                     as *mut sockaddr_storage
                     as *mut sockaddr_in6;
-                (*sin6).sin6_family = AF_INET6 as u16;
+                (*sin6).sin6_family = AF_INET6 as addr_family_t;
                 (*sin6).sin6_addr.s6_addr = [0u8; 16];
             }
 
@@ -1022,7 +1022,7 @@ pub fn get_ipaddr_info(name: &str) -> Result<IpInfo, Error> {
                 let sin6 = &mut req.lifr_lifru.lifru_addr
                     as *mut sockaddr_storage
                     as *mut sockaddr_in6;
-                (*sin6).sin6_family = AF_INET6 as u16;
+                (*sin6).sin6_family = AF_INET6 as addr_family_t;
                 &s6
             }
             _ => return Err(Error::NotFound(name.into())),
@@ -1105,13 +1105,14 @@ unsafe fn ipaddr_info(
         }
     };
 
+    #[allow(clippy::unnecessary_cast)]
     Ok(Some(IpInfo {
         addr,
         state,
         ifname: name.to_string(),
         index: idx,
         mask: ip_mask(mask),
-        family: sa.ss_family,
+        family: sa.ss_family as u16,
     }))
 }
 
@@ -1150,7 +1151,7 @@ pub fn create_ip_addr_linklocal(
             as *mut sockaddr_in6;
 
         // Set netmask to /10
-        (*sin6).sin6_family = AF_INET6 as u16;
+        (*sin6).sin6_family = AF_INET6 as addr_family_t;
         (*sin6).sin6_addr.s6_addr = [
             0b11111111, 0b11000000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         ];
@@ -1279,7 +1280,7 @@ pub(crate) fn create_ip_addr_static(
         // assign addr
         match addr {
             IpPrefix::V6(a) => {
-                req.lifr_lifru.lifru_addr.ss_family = AF_INET6 as u16;
+                req.lifr_lifru.lifru_addr.ss_family = AF_INET6 as addr_family_t;
                 let sas =
                     &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage;
 
@@ -1287,7 +1288,7 @@ pub(crate) fn create_ip_addr_static(
                 (*sa6).sin6_addr.s6_addr = a.addr.octets();
             }
             IpPrefix::V4(a) => {
-                req.lifr_lifru.lifru_addr.ss_family = AF_INET as u16;
+                req.lifr_lifru.lifru_addr.ss_family = AF_INET as addr_family_t;
                 let sas =
                     &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage;
                 let sa4 = sas as *mut sockaddr_in;
@@ -1299,7 +1300,7 @@ pub(crate) fn create_ip_addr_static(
         // assign netmask
         match addr {
             IpPrefix::V6(a) => {
-                req.lifr_lifru.lifru_addr.ss_family = AF_INET6 as u16;
+                req.lifr_lifru.lifru_addr.ss_family = AF_INET6 as addr_family_t;
                 let sas =
                     &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage;
 
@@ -1311,7 +1312,7 @@ pub(crate) fn create_ip_addr_static(
                 (*sa6).sin6_addr.s6_addr = Ipv6Addr::from(addr).octets();
             }
             IpPrefix::V4(a) => {
-                req.lifr_lifru.lifru_addr.ss_family = AF_INET as u16;
+                req.lifr_lifru.lifru_addr.ss_family = AF_INET as addr_family_t;
                 let sas =
                     &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage;
 
@@ -1844,7 +1845,7 @@ pub fn get_neighbor(ifname: &str, addr: Ipv6Addr) -> Result<Neighbor, Error> {
     let sin6 = &mut lifru_nd_req.lnr_addr as *mut sockaddr_storage
         as *mut sockaddr_in6;
     unsafe {
-        (*sin6).sin6_family = AF_INET6 as u16;
+        (*sin6).sin6_family = AF_INET6 as addr_family_t;
         (*sin6).sin6_addr.s6_addr = addr.octets();
     }
 

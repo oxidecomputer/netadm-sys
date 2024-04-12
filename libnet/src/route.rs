@@ -46,8 +46,9 @@
 
 use crate::{
     sys::{
-        self, rt_msghdr, RTA_AUTHOR, RTA_BRD, RTA_DELAY, RTA_DST, RTA_GATEWAY,
-        RTA_GENMASK, RTA_IFA, RTA_IFP, RTA_NETMASK, RTA_SRC,
+        self, addr_family_t, rt_msghdr, RTA_AUTHOR, RTA_BRD, RTA_DELAY,
+        RTA_DST, RTA_GATEWAY, RTA_GENMASK, RTA_IFA, RTA_IFP, RTA_NETMASK,
+        RTA_SRC,
     },
     IpPrefix,
 };
@@ -519,7 +520,9 @@ fn serialize_addr(buf: &mut Vec<u8>, a: IpAddr) {
     match a {
         IpAddr::V4(a) => {
             let sa = sockaddr_in {
-                sin_family: AF_INET as u16,
+                #[cfg(target_os = "macos")]
+                sin_len: 0,
+                sin_family: AF_INET as addr_family_t,
                 sin_port: 0,
                 sin_addr: libc::in_addr {
                     s_addr: u32::from(a).to_be(),
@@ -536,7 +539,7 @@ fn serialize_addr(buf: &mut Vec<u8>, a: IpAddr) {
         IpAddr::V6(a) => {
             let sa = unsafe {
                 sockaddr_in6 {
-                    sin6_family: AF_INET6 as u16,
+                    sin6_family: AF_INET6 as addr_family_t,
                     sin6_port: 0,
                     sin6_flowinfo: 0,
                     sin6_addr: libc::in6_addr {
