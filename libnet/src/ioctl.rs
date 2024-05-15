@@ -476,7 +476,7 @@ pub(crate) fn get_mtu(linkid: u32) -> Result<u32, Error> {
         pr_valsize: size_of::<u32>() as u32,
         pr_val: 0,
     };
-    arg.pr_name[..3].copy_from_slice(&b"mtu".map(|u| u as i8));
+    arg.pr_name[..3].copy_from_slice(&b"mtu".map(|u| u as c_char));
 
     unsafe {
         ioctl!(fd, DLDIOC_GETMACPROP, &mut arg)?;
@@ -1804,7 +1804,7 @@ pub(crate) fn delete_vnic(id: u32) -> Result<(), Error> {
 #[derive(Debug)]
 pub struct Neighbor {
     pub state: NeighborState,
-    pub l2_addr: Vec<i8>,
+    pub l2_addr: Vec<c_char>,
     pub flags: i32,
 }
 
@@ -1839,7 +1839,7 @@ pub fn get_neighbor(ifname: &str, addr: Ipv6Addr) -> Result<Neighbor, Error> {
     let mut ior: sys::lifreq = unsafe { std::mem::zeroed() };
     let mut lifru_nd_req: sys::lif_nd_req = unsafe { std::mem::zeroed() };
     for (i, b) in ifname.bytes().enumerate() {
-        ior.lifr_name[i] = b as i8;
+        ior.lifr_name[i] = b as c_char;
     }
 
     let sin6 = &mut lifru_nd_req.lnr_addr as *mut sockaddr_storage
@@ -1859,7 +1859,14 @@ pub fn get_neighbor(ifname: &str, addr: Ipv6Addr) -> Result<Neighbor, Error> {
         state: NeighborState::try_from(unsafe {
             ior.lifr_lifru.lifru_nd_req.lnr_state_create
         })?,
-        l2_addr: unsafe { ior.lifr_lifru.lifru_nd_req.lnr_hdw_addr.to_vec() },
+        l2_addr: unsafe {
+            ior.lifr_lifru
+                .lifru_nd_req
+                .lnr_hdw_addr
+                .iter()
+                .map(|x| *x as c_char)
+                .collect()
+        },
         flags: unsafe { ior.lifr_lifru.lifru_nd_req.lnr_flags },
     })
 }
@@ -1872,7 +1879,7 @@ pub fn get_ifnum(ifname: &str, af: u16) -> Result<i32, Error> {
     };
     let mut ior: sys::lifreq = unsafe { std::mem::zeroed() };
     for (i, b) in ifname.as_bytes().iter().enumerate() {
-        ior.lifr_name[i] = *b as i8;
+        ior.lifr_name[i] = *b as c_char;
     }
     unsafe {
         ioctl!(s, sys::SIOCGLIFINDEX, &mut ior)?;
