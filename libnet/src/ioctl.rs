@@ -7,7 +7,7 @@ use crate::sys::{
     dld_macaddrinfo_t, mac_prop_id_t_MAC_PROP_MTU, DLDIOC_GETMACPROP,
     DLDIOC_MACADDRGET, SIMNET_IOC_INFO, SIMNET_IOC_MODIFY,
 };
-use crate::{Error, IpInfo, IpPrefix, IpState, LinkFlags};
+use crate::{Error, IpInfo, IpNet, IpState, LinkFlags};
 use libc::{free, malloc};
 use libc::{
     sockaddr_in, sockaddr_in6, sockaddr_storage, AF_INET, AF_INET6, AF_UNSPEC,
@@ -712,7 +712,7 @@ pub(crate) fn delete_ipaddr(objname: impl AsRef<str>) -> Result<(), Error> {
 //TODO check auth?
 pub(crate) fn create_ipaddr(
     name: impl AsRef<str>,
-    addr: IpPrefix,
+    addr: IpNet,
 ) -> Result<(), Error> {
     let parts: Vec<&str> = name.as_ref().split('/').collect();
     if parts.len() < 2 {
@@ -723,11 +723,11 @@ pub(crate) fn create_ipaddr(
     let ifname = parts[0];
 
     let (iff, sock) = match addr {
-        IpPrefix::V4(_) => {
+        IpNet::V4(_) => {
             let s4 = Socket::new(Domain::IPV4, Type::DGRAM, None)?;
             (sys::IFF_IPV4.into(), s4)
         }
-        IpPrefix::V6(_) => {
+        IpNet::V6(_) => {
             let s6 = Socket::new(Domain::IPV6, Type::DGRAM, None)?;
             (sys::IFF_IPV6.into(), s6)
         }
@@ -1259,7 +1259,7 @@ fn parse_ifname(req: &sys::lifreq) -> Result<(&str, i32), Error> {
 pub(crate) fn create_ip_addr_static(
     ifname: impl AsRef<str>,
     objname: impl AsRef<str>,
-    addr: IpPrefix,
+    addr: IpNet,
     sock: &Socket,
 ) -> Result<(), Error> {
     unsafe {
@@ -1269,56 +1269,56 @@ pub(crate) fn create_ip_addr_static(
         }
 
         match addr {
-            IpPrefix::V6(_) => {
+            IpNet::V6(_) => {
                 create_logical_interface_v6(sock, &mut req)?;
             }
-            IpPrefix::V4(_) => {
+            IpNet::V4(_) => {
                 create_logical_interface_v4(sock, &mut req)?;
             }
         }
 
         // assign addr
         match addr {
-            IpPrefix::V6(a) => {
+            IpNet::V6(a) => {
                 req.lifr_lifru.lifru_addr.ss_family = AF_INET6 as addr_family_t;
                 let sas =
                     &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage;
 
                 let sa6 = sas as *mut sockaddr_in6;
-                (*sa6).sin6_addr.s6_addr = a.addr.octets();
+                (*sa6).sin6_addr.s6_addr = a.addr().octets();
             }
-            IpPrefix::V4(a) => {
+            IpNet::V4(a) => {
                 req.lifr_lifru.lifru_addr.ss_family = AF_INET as addr_family_t;
                 let sas =
                     &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage;
                 let sa4 = sas as *mut sockaddr_in;
-                (*sa4).sin_addr.s_addr = Into::<u32>::into(a.addr).to_be();
+                (*sa4).sin_addr.s_addr = Into::<u32>::into(a.addr()).to_be();
             }
         };
         ioctl_ro!(sock, sys::SIOCSLIFADDR, &req)?;
 
         // assign netmask
         match addr {
-            IpPrefix::V6(a) => {
+            IpNet::V6(a) => {
                 req.lifr_lifru.lifru_addr.ss_family = AF_INET6 as addr_family_t;
                 let sas =
                     &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage;
 
                 let sa6 = sas as *mut sockaddr_in6;
                 let mut addr: u128 = 0;
-                for i in 0..a.mask {
+                for i in 0..a.width() {
                     addr |= 1 << (127 - i);
                 }
                 (*sa6).sin6_addr.s6_addr = Ipv6Addr::from(addr).octets();
             }
-            IpPrefix::V4(a) => {
+            IpNet::V4(a) => {
                 req.lifr_lifru.lifru_addr.ss_family = AF_INET as addr_family_t;
                 let sas =
                     &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage;
 
                 let sa4 = sas as *mut sockaddr_in;
                 let mut addr: u32 = 0;
-                for i in 0..a.mask {
+                for i in 0..a.width() {
                     addr |= 1 << i;
                 }
                 (*sa4).sin_addr.s_addr = addr;
@@ -1330,8 +1330,8 @@ pub(crate) fn create_ip_addr_static(
         let (kernel_ifname, lifnum) = parse_ifname(&req)?;
 
         let af = match addr {
-            IpPrefix::V6(_) => AF_INET6 as u16,
-            IpPrefix::V4(_) => AF_INET as u16,
+            IpNet::V6(_) => AF_INET6 as u16,
+            IpNet::V4(_) => AF_INET as u16,
         };
 
         let f = File::open("/etc/svc/volatile/ipadm/ipmgmt_door")?;
@@ -1432,7 +1432,7 @@ fn ipmgmtd_persist(
     objname: &str,
     ifname: &str,
     lifnum: i32,
-    addr: Option<IpPrefix>,
+    addr: Option<IpNet>,
     f: &File,
 ) -> Result<(), Error> {
     let mut nvl = nvpair::NvList::new_unique_names();
@@ -1442,16 +1442,13 @@ fn ipmgmtd_persist(
 
     match addr {
         Some(addr) => {
-            let ahname = match addr {
-                IpPrefix::V6(a) => a.addr.to_string(),
-                IpPrefix::V4(a) => a.addr.to_string(),
-            };
+            let ahname = addr.addr().to_string();
 
             let mut addr_nvl = nvpair::NvList::new_unique_names();
             addr_nvl.insert("_aname", ahname.as_str())?;
             let addr_nvl_name = match addr {
-                IpPrefix::V6(_) => "_ipv6addr",
-                IpPrefix::V4(_) => "_ipv4addr",
+                IpNet::V6(_) => "_ipv6addr",
+                IpNet::V4(_) => "_ipv4addr",
             };
 
             nvl.insert(addr_nvl_name, addr_nvl.as_ref())?;

@@ -6,7 +6,7 @@ use colored::*;
 use libnet::{
     self, add_route, create_ipaddr, create_simnet_link, create_tfport_link,
     create_vnic_link, get_ipaddr_info, get_ipaddrs, get_link, get_links, ip,
-    route, sys::MAXMACADDRLEN, IpPrefix, IpState, LinkFlags, LinkHandle,
+    route, sys::MAXMACADDRLEN, IpNet, IpState, LinkFlags, LinkHandle,
 };
 use std::io::{stdout, Write};
 use std::net::{IpAddr, Ipv6Addr};
@@ -187,13 +187,13 @@ struct CreateAddr {
     /// Name for the new address
     name: String,
     /// Address to create
-    addr: IpPrefix,
+    addr: IpNet,
 }
 
 #[derive(Parser)]
 struct CreateRoute {
     /// Route destination
-    destination: IpPrefix,
+    destination: IpNet,
     /// Route gateway
     gateway: IpAddr,
     /// Route interface
@@ -203,7 +203,7 @@ struct CreateRoute {
 #[derive(Parser)]
 struct DeleteRoute {
     /// Route destination
-    destination: IpPrefix,
+    destination: IpNet,
     /// Route gateway
     gateway: IpAddr,
     /// Route interface
@@ -246,7 +246,7 @@ struct ShowRoutes {
 #[derive(Parser)]
 struct ShowRoute {
     /// The destination to show a route for.
-    destination: IpPrefix,
+    destination: IpNet,
 }
 
 #[derive(Parser)]

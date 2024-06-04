@@ -1,7 +1,7 @@
 use anyhow::Result;
 use libnet::{
     create_ipaddr, create_simnet_link, enable_v6_link_local, get_ipaddr_info,
-    get_ipaddrs, DropIp, DropLink, IpPrefix, Ipv6Prefix, LinkFlags,
+    get_ipaddrs, DropIp, DropLink, IpNet, Ipv6Net, LinkFlags,
 };
 use std::net::IpAddr;
 use std::str::FromStr;
@@ -79,15 +79,14 @@ fn test_address_consistency() -> Result<()> {
 #[test]
 fn test_v6_static_lifecycle() -> Result<()> {
     let name = "lo0/v6slnt";
-    let prefix =
-        Ipv6Prefix::from_str("fd00:1701:d::1/64").expect("parse prefix");
+    let prefix = Ipv6Net::from_str("fd00:1701:d::1/64").expect("parse prefix");
 
     // create a static address on the loopback device
-    create_ipaddr(name, IpPrefix::V6(prefix)).expect("create addr");
+    create_ipaddr(name, IpNet::V6(prefix)).expect("create addr");
 
     // get the address we just created and chekc equivalence
     let addr: DropIp = get_ipaddr_info(name).expect("get info").into();
-    assert_eq!(addr.info.addr, prefix.addr);
+    assert_eq!(addr.info.addr, prefix.addr());
 
     Ok(())
 }

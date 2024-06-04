@@ -1,4 +1,4 @@
-// Copyright 2021 Oxide Computer Company
+// Copyright 2024 Oxide Computer Company
 
 #![allow(clippy::uninlined_format_args)]
 
@@ -12,6 +12,8 @@ use std::num::ParseIntError;
 use std::str::FromStr;
 use thiserror::Error;
 use tracing::debug;
+
+pub use oxnet::{IpNet, IpNetParseError, IpNetPrefixError, Ipv4Net, Ipv6Net};
 
 /// Structures and functions for interacting with IP network configuration and
 /// state.
@@ -401,10 +403,7 @@ pub use crate::ioctl::get_neighbor;
 ///
 /// Standard convention is to use a name of the form
 /// `<datalink-name>/<interface-name>`.
-pub fn create_ipaddr(
-    name: impl AsRef<str>,
-    addr: IpPrefix,
-) -> Result<(), Error> {
+pub fn create_ipaddr(name: impl AsRef<str>, addr: IpNet) -> Result<(), Error> {
     crate::ioctl::create_ipaddr(name, addr)
 }
 
@@ -448,137 +447,145 @@ pub use crate::route::ensure_route_present;
 /// Delete a route to `destination` via `gateway`.
 pub use crate::route::delete_route;
 
-/// An IP prefix is the leading bits of an IP address combined with a prefix
-/// length indicating the number of leading bits that are significant.
-#[derive(Debug, Clone, Copy)]
-pub enum IpPrefix {
-    V4(Ipv4Prefix),
-    V6(Ipv6Prefix),
-}
+mod old {
+    use std::net::IpAddr;
+    use std::net::{AddrParseError, Ipv4Addr, Ipv6Addr};
+    use std::num::ParseIntError;
+    use std::str::FromStr;
+    use thiserror::Error;
 
-impl IpPrefix {
-    pub fn ip(&self) -> IpAddr {
-        match self {
-            Self::V4(p) => p.addr.into(),
-            Self::V6(p) => p.addr.into(),
-        }
+    /// An IP prefix is the leading bits of an IP address combined with a prefix
+    /// length indicating the number of leading bits that are significant.
+    #[derive(Debug, Clone, Copy)]
+    pub enum IpNet {
+        V4(Ipv4Net),
+        V6(Ipv6Net),
     }
-    pub fn mask(&self) -> u8 {
-        match self {
-            Self::V4(p) => p.mask,
-            Self::V6(p) => p.mask,
-        }
-    }
-    pub fn mask_as_addr(&self) -> IpAddr {
-        match self {
-            Self::V4(p) => {
-                let mut mask: u32 = 0;
-                for i in 0..p.mask {
-                    mask |= 1 << i;
-                }
-                Ipv4Addr::from(mask.to_be()).into()
-            }
-            Self::V6(p) => {
-                let mut mask: u128 = 0;
-                for i in 0..p.mask {
-                    mask |= 1 << i;
-                }
-                Ipv6Addr::from(mask.to_be()).into()
+
+    impl IpNet {
+        pub fn ip(&self) -> IpAddr {
+            match self {
+                Self::V4(p) => p.addr.into(),
+                Self::V6(p) => p.addr.into(),
             }
         }
-    }
-}
-
-impl FromStr for IpPrefix {
-    type Err = IpPrefixParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match Ipv6Prefix::from_str(s) {
-            Ok(a) => Ok(IpPrefix::V6(a)),
-            _ => match Ipv4Prefix::from_str(s) {
-                Ok(a) => Ok(IpPrefix::V4(a)),
-                Err(_) => Err(Self::Err::Cidr),
-            },
+        pub fn mask(&self) -> u8 {
+            match self {
+                Self::V4(p) => p.mask,
+                Self::V6(p) => p.mask,
+            }
+        }
+        pub fn mask_as_addr(&self) -> IpAddr {
+            match self {
+                Self::V4(p) => {
+                    let mut mask: u32 = 0;
+                    for i in 0..p.mask {
+                        mask |= 1 << i;
+                    }
+                    Ipv4Addr::from(mask.to_be()).into()
+                }
+                Self::V6(p) => {
+                    let mut mask: u128 = 0;
+                    for i in 0..p.mask {
+                        mask |= 1 << i;
+                    }
+                    Ipv6Addr::from(mask.to_be()).into()
+                }
+            }
         }
     }
-}
 
-impl From<Ipv6Prefix> for IpPrefix {
-    fn from(prefix: Ipv6Prefix) -> Self {
-        IpPrefix::V6(prefix)
+    impl FromStr for IpNet {
+        type Err = IpNetParseError;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            match Ipv6Net::from_str(s) {
+                Ok(a) => Ok(IpNet::V6(a)),
+                _ => match Ipv4Net::from_str(s) {
+                    Ok(a) => Ok(IpNet::V4(a)),
+                    Err(_) => Err(Self::Err::Cidr),
+                },
+            }
+        }
     }
-}
 
-impl From<Ipv4Prefix> for IpPrefix {
-    fn from(prefix: Ipv4Prefix) -> Self {
-        IpPrefix::V4(prefix)
+    impl From<Ipv6Net> for IpNet {
+        fn from(prefix: Ipv6Net) -> Self {
+            IpNet::V6(prefix)
+        }
     }
-}
 
-/// An IPv6 address with a mask to indicate how many leading bits are
-/// significant.
-#[derive(Debug, Clone, Copy)]
-pub struct Ipv6Prefix {
-    pub addr: Ipv6Addr,
-    pub mask: u8,
-}
+    impl From<Ipv4Net> for IpNet {
+        fn from(prefix: Ipv4Net) -> Self {
+            IpNet::V4(prefix)
+        }
+    }
 
-/// An IPv4 address with a mask to indicate how many leading bits are
-/// significant.
-#[derive(Debug, Clone, Copy)]
-pub struct Ipv4Prefix {
-    pub addr: Ipv4Addr,
-    pub mask: u8,
-}
+    /// An IPv6 address with a mask to indicate how many leading bits are
+    /// significant.
+    #[derive(Debug, Clone, Copy)]
+    pub struct Ipv6Net {
+        pub addr: Ipv6Addr,
+        pub mask: u8,
+    }
 
-/// An error that inddicates what went wrong with parsing an IP prefix.
-#[derive(Debug, Error)]
-pub enum IpPrefixParseError {
-    #[error("expected CIDR representation <addr>/<mask")]
-    Cidr,
+    /// An IPv4 address with a mask to indicate how many leading bits are
+    /// significant.
+    #[derive(Debug, Clone, Copy)]
+    pub struct Ipv4Net {
+        pub addr: Ipv4Addr,
+        pub mask: u8,
+    }
 
-    #[error("address parse error: {0}")]
-    Addr(#[from] AddrParseError),
+    /// An error that inddicates what went wrong with parsing an IP prefix.
+    #[derive(Debug, Error)]
+    pub enum IpNetParseError {
+        #[error("expected CIDR representation <addr>/<mask")]
+        Cidr,
 
-    #[error("mask parse error: {0}")]
-    Mask(#[from] ParseIntError),
-}
+        #[error("address parse error: {0}")]
+        Addr(#[from] AddrParseError),
 
-impl FromStr for Ipv6Prefix {
-    type Err = IpPrefixParseError;
+        #[error("mask parse error: {0}")]
+        Mask(#[from] ParseIntError),
+    }
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parts: Vec<&str> = s.split('/').collect();
-        if parts.len() < 2 {
-            return Ok(Ipv6Prefix {
+    impl FromStr for Ipv6Net {
+        type Err = IpNetParseError;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            let parts: Vec<&str> = s.split('/').collect();
+            if parts.len() < 2 {
+                return Ok(Ipv6Net {
+                    addr: Ipv6Addr::from_str(parts[0])?,
+                    mask: 0,
+                });
+            }
+
+            Ok(Ipv6Net {
                 addr: Ipv6Addr::from_str(parts[0])?,
-                mask: 0,
-            });
+                mask: u8::from_str(parts[1])?,
+            })
         }
-
-        Ok(Ipv6Prefix {
-            addr: Ipv6Addr::from_str(parts[0])?,
-            mask: u8::from_str(parts[1])?,
-        })
     }
-}
 
-impl FromStr for Ipv4Prefix {
-    type Err = IpPrefixParseError;
+    impl FromStr for Ipv4Net {
+        type Err = IpNetParseError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parts: Vec<&str> = s.split('/').collect();
-        if parts.len() < 2 {
-            return Ok(Ipv4Prefix {
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            let parts: Vec<&str> = s.split('/').collect();
+            if parts.len() < 2 {
+                return Ok(Ipv4Net {
+                    addr: Ipv4Addr::from_str(parts[0])?,
+                    mask: 0,
+                });
+            }
+
+            Ok(Ipv4Net {
                 addr: Ipv4Addr::from_str(parts[0])?,
-                mask: 0,
-            });
+                mask: u8::from_str(parts[1])?,
+            })
         }
-
-        Ok(Ipv4Prefix {
-            addr: Ipv4Addr::from_str(parts[0])?,
-            mask: u8::from_str(parts[1])?,
-        })
     }
 }
 

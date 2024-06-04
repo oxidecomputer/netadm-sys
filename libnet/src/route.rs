@@ -50,7 +50,7 @@ use crate::{
         RTA_DST, RTA_GATEWAY, RTA_GENMASK, RTA_IFA, RTA_IFP, RTA_NETMASK,
         RTA_SRC,
     },
-    IpPrefix,
+    IpNet,
 };
 use std::mem::size_of;
 use std::slice::from_raw_parts;
@@ -256,15 +256,15 @@ unsafe fn get_addr_element(
 }
 
 pub fn get_route(
-    destination: IpPrefix,
+    destination: IpNet,
     timeout: Option<Duration>,
 ) -> Result<Route, Error> {
     let mut sock = Socket::new(Domain::from(AF_ROUTE), Type::RAW, None)?;
     sock.set_read_timeout(timeout)?;
     let mut msglen = size_of::<rt_msghdr>();
     let flags = match destination {
-        IpPrefix::V4(p) => {
-            if p.mask == 32 {
+        IpNet::V4(p) => {
+            if p.is_host_net() {
                 msglen += size_of::<sockaddr_in>();
                 sys::RTF_HOST as i32
             } else {
@@ -272,8 +272,8 @@ pub fn get_route(
                 0i32
             }
         }
-        IpPrefix::V6(p) => {
-            if p.mask == 128 {
+        IpNet::V6(p) => {
+            if p.is_host_net() {
                 msglen += size_of::<sockaddr_in6>();
                 sys::RTF_HOST as i32
             } else {
@@ -303,9 +303,9 @@ pub fn get_route(
             size_of::<rt_msghdr>(),
         )
     });
-    serialize_addr(&mut buf, destination.ip());
+    serialize_addr(&mut buf, destination.addr());
     if flags == 0 {
-        serialize_addr(&mut buf, destination.mask_as_addr());
+        serialize_addr(&mut buf, destination.mask_addr());
     }
 
     let n = sock.write(&buf)?;
@@ -414,7 +414,7 @@ pub fn get_routes() -> Result<Vec<Route>, Error> {
 }
 
 pub fn add_route(
-    destination: IpPrefix,
+    destination: IpNet,
     gateway: IpAddr,
     interface: Option<String>,
 ) -> Result<(), Error> {
@@ -422,7 +422,7 @@ pub fn add_route(
 }
 
 pub fn ensure_route_present(
-    destination: IpPrefix,
+    destination: IpNet,
     gateway: IpAddr,
     interface: Option<String>,
 ) -> Result<(), Error> {
@@ -439,7 +439,7 @@ pub fn ensure_route_present(
 }
 
 pub fn delete_route(
-    destination: IpPrefix,
+    destination: IpNet,
     gateway: IpAddr,
     interface: Option<String>,
 ) -> Result<(), Error> {
@@ -447,7 +447,7 @@ pub fn delete_route(
 }
 
 fn mod_route(
-    destination: IpPrefix,
+    destination: IpNet,
     gateway: IpAddr,
     interface: Option<String>,
     cmd: u8,
@@ -455,10 +455,10 @@ fn mod_route(
     let mut sock = Socket::new(Domain::from(AF_ROUTE), Type::RAW, None)?;
     let mut msglen = size_of::<rt_msghdr>();
     match destination {
-        IpPrefix::V4(_) => {
+        IpNet::V4(_) => {
             msglen += size_of::<sockaddr_in>() * 2;
         }
-        IpPrefix::V6(_) => {
+        IpNet::V6(_) => {
             msglen += size_of::<sockaddr_in6>() * 2;
         }
     };
@@ -496,12 +496,12 @@ fn mod_route(
         )
     });
 
-    serialize_addr(&mut buf, destination.ip());
+    serialize_addr(&mut buf, destination.addr());
     serialize_addr(&mut buf, gateway);
-    serialize_addr(&mut buf, destination.mask_as_addr());
+    serialize_addr(&mut buf, destination.mask_addr());
 
     if let Some(ifp) = interface {
-        serialize_dladdr(&mut buf, &ifp, destination.ip())?;
+        serialize_dladdr(&mut buf, &ifp, destination.addr())?;
     }
 
     let n = sock.write(&buf)?;
