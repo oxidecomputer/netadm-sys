@@ -1,3 +1,5 @@
+// Copyright 2024 Oxide Computer Company
+
 use anyhow::Result;
 use libnet::{
     create_ipaddr, create_simnet_link, enable_v6_link_local, get_ipaddr_info,

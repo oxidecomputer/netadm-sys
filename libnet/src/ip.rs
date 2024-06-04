@@ -1,4 +1,4 @@
-// Copyright 2021 Oxide Computer Company
+// Copyright 2024 Oxide Computer Company
 
 use crate::nvlist::{NvDataType, NvHeader, NvPair, Value, NVP};
 use libc::{free, malloc, sockaddr_in6};
