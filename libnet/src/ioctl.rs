@@ -1305,11 +1305,7 @@ pub(crate) fn create_ip_addr_static(
                     &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage;
 
                 let sa6 = sas as *mut sockaddr_in6;
-                let mut addr: u128 = 0;
-                for i in 0..a.width() {
-                    addr |= 1 << (127 - i);
-                }
-                (*sa6).sin6_addr.s6_addr = Ipv6Addr::from(addr).octets();
+                (*sa6).sin6_addr.s6_addr = a.mask_addr().octets();
             }
             IpNet::V4(a) => {
                 req.lifr_lifru.lifru_addr.ss_family = AF_INET as addr_family_t;
@@ -1317,10 +1313,7 @@ pub(crate) fn create_ip_addr_static(
                     &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage;
 
                 let sa4 = sas as *mut sockaddr_in;
-                let mut addr: u32 = 0;
-                for i in 0..a.width() {
-                    addr |= 1 << i;
-                }
+                let addr: u32 = a.mask_addr().into();
                 (*sa4).sin_addr.s_addr = addr;
             }
         };
