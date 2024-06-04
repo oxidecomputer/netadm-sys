@@ -1292,7 +1292,8 @@ pub(crate) fn create_ip_addr_static(
                 let sas =
                     &mut req.lifr_lifru.lifru_addr as *mut sockaddr_storage;
                 let sa4 = sas as *mut sockaddr_in;
-                (*sa4).sin_addr.s_addr = Into::<u32>::into(a.addr()).to_be();
+                let addr: u32 = a.addr().into();
+                (*sa4).sin_addr.s_addr = addr.to_be();
             }
         };
         ioctl_ro!(sock, sys::SIOCSLIFADDR, &req)?;
@@ -1314,7 +1315,7 @@ pub(crate) fn create_ip_addr_static(
 
                 let sa4 = sas as *mut sockaddr_in;
                 let addr: u32 = a.mask_addr().into();
-                (*sa4).sin_addr.s_addr = addr;
+                (*sa4).sin_addr.s_addr = addr.to_be();
             }
         };
         ioctl_ro!(sock, sys::SIOCSLIFNETMASK, &req)?;
