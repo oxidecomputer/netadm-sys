@@ -27,6 +27,9 @@ pub mod route;
 /// System-level machinery
 pub mod sys;
 
+/// Functions for managing RFC2367 keys
+pub mod pf_key;
+
 mod ioctl;
 mod kstat;
 mod ndpd;
