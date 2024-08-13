@@ -587,6 +587,7 @@ dependencies = [
  "clap",
  "colored",
  "libnet",
+ "oxnet",
  "tabwriter",
  "tracing",
  "tracing-subscriber",

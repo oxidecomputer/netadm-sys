@@ -4,14 +4,13 @@
 
 use colored::*;
 use num_enum::TryFromPrimitiveError;
+use oxnet::IpNet;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::net::IpAddr;
 use std::str::FromStr;
 use thiserror::Error;
 use tracing::debug;
-
-pub use oxnet::{IpNet, IpNetParseError, IpNetPrefixError, Ipv4Net, Ipv6Net};
 
 /// Structures and functions for interacting with IP network configuration and
 /// state.
