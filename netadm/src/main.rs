@@ -3,7 +3,7 @@
 use anyhow::{anyhow, Result};
 use clap::{Parser, ValueEnum};
 use colored::*;
-use libnet::pf_key::{tcp_md5_key_add, tcp_md5_key_remove};
+use libnet::pf_key::{tcp_md5_key_remove, tcp_md5_key_set};
 use libnet::{
     self, add_route, create_ipaddr, create_simnet_link, create_tfport_link,
     create_vnic_link, get_ipaddr_info, get_ipaddrs, get_link, get_links, ip,
@@ -216,6 +216,9 @@ struct CreateTcpMd5 {
     authstring: String,
     /// How long the association is valid for
     valid_time: humantime::Duration,
+    /// Treat this as an update instead of a create
+    #[clap(long)]
+    update: bool,
 }
 
 #[derive(Parser)]
@@ -463,11 +466,12 @@ fn create_route(_opts: &Opts, _c: &Create, c: &CreateRoute) -> Result<()> {
 }
 
 fn create_tcp_md5(_opts: &Opts, _c: &Create, c: &CreateTcpMd5) -> Result<()> {
-    tcp_md5_key_add(
+    tcp_md5_key_set(
         c.src.into(),
         c.dst.into(),
         &c.authstring,
         c.valid_time.into(),
+        c.update,
     )?;
     Ok(())
 }

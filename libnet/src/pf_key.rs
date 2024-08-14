@@ -165,7 +165,7 @@ pub struct Key {
 }
 
 #[repr(C, packed)]
-pub struct TcpMd5AddKeyRequest {
+pub struct TcpMd5SetKeyRequest {
     pub header: Header,
     pub association: Association,
     pub lifetime: Lifetime,
@@ -191,7 +191,34 @@ pub fn tcp_md5_key_add(
     authstring: &str,
     valid_time: Duration,
 ) -> anyhow::Result<()> {
-    let msg = TcpMd5AddKeyRequest::new(src, dst, authstring, valid_time);
+    tcp_md5_key_set(src, dst, authstring, valid_time, false)
+}
+
+/// Update a TCP-MD5 security association for the provided souce and destination
+/// address with `authstring` as the key that is valid for `valid_time` after
+/// creation.
+pub fn tcp_md5_key_update(
+    src: SockAddr,
+    dst: SockAddr,
+    authstring: &str,
+    valid_time: Duration,
+) -> anyhow::Result<()> {
+    tcp_md5_key_set(src, dst, authstring, valid_time, true)
+}
+
+/// Set a TCP-MD5 security association for the provided souce and destination
+/// address with `authstring` as the key that is valid for `valid_time` after
+/// creation. If update is true, this is treated as an update to an existing
+/// association, otherwise a new association is created.
+pub fn tcp_md5_key_set(
+    src: SockAddr,
+    dst: SockAddr,
+    authstring: &str,
+    valid_time: Duration,
+    update: bool,
+) -> anyhow::Result<()> {
+    let msg =
+        TcpMd5SetKeyRequest::new(src, dst, authstring, valid_time, update);
     let mut sock = Socket::new(
         Domain::from(PF_KEY),
         Type::RAW,
@@ -199,8 +226,8 @@ pub fn tcp_md5_key_add(
     )?;
     let data = unsafe {
         std::slice::from_raw_parts(
-            (&msg as *const TcpMd5AddKeyRequest) as *const u8,
-            size_of::<TcpMd5AddKeyRequest>(),
+            (&msg as *const TcpMd5SetKeyRequest) as *const u8,
+            size_of::<TcpMd5SetKeyRequest>(),
         )
     };
     let n = sock.write(data)?;
@@ -222,16 +249,21 @@ pub fn tcp_md5_key_add(
     Ok(())
 }
 
-impl TcpMd5AddKeyRequest {
+impl TcpMd5SetKeyRequest {
     fn new(
         src: SockAddr,
         dst: SockAddr,
         authstring: &str,
         valid_time: Duration,
+        update: bool,
     ) -> Self {
         let header = Header {
             version: PF_KEY_V2,
-            typ: MessageType::Add,
+            typ: if update {
+                MessageType::Update
+            } else {
+                MessageType::Add
+            },
             errno: 0,
             sa_typ: SaType::TcpSig,
             len: u16::try_from(size_of::<Self>()).unwrap() >> 3,
