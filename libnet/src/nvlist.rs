@@ -34,6 +34,7 @@ pub struct NvHeader {
     pub reserved2: u8,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 #[repr(C)]
 pub struct NvPriv {
@@ -132,6 +133,7 @@ pub enum NvDataType {
     Uint8Array = 26,
 }
 
+#[allow(dead_code)]
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct Nvi {
@@ -140,12 +142,14 @@ pub struct Nvi {
     pub hash_next: *mut Nvp,
 }
 
+#[allow(dead_code)]
 #[repr(C)]
 pub union NviU {
     pub align: u64,
     pub nvi: Nvi,
 }
 
+#[allow(dead_code)]
 #[repr(C)]
 pub struct Nvp {
     pub un: NviU,

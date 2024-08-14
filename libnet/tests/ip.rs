@@ -9,23 +9,23 @@ use oxnet::{IpNet, Ipv6Net};
 use std::net::IpAddr;
 use std::str::FromStr;
 
-/// The tests in this file test IP address functionality in libnet.
-///
-/// Most tests need to be run as a user with administrative privileges.
-///
-/// Conventions:
-///
-///   - When a link is created for testing purposes it is prefixed with
-///     "lnt_<token>" where token is unique to the test that is running. This
-///     is so tests can be run concurrently with out name collisions. And so we
-///     avoid race conditions between tests in certain situations.
-///
-///   - When an IP address is created for testing purposes, it takes the form
-///     <ifxname>/<token>_lnt, where token is unique to the test that is
-///     running.
-///
-///   - All links should be created using the DropLink type. This is to ensure
-///     tests that fail do not leave test links behind on the system.
+// The tests in this file test IP address functionality in libnet.
+//
+// Most tests need to be run as a user with administrative privileges.
+//
+// Conventions:
+//
+//   - When a link is created for testing purposes it is prefixed with
+//     "lnt_<token>" where token is unique to the test that is running. This
+//     is so tests can be run concurrently with out name collisions. And so we
+//     avoid race conditions between tests in certain situations.
+//
+//   - When an IP address is created for testing purposes, it takes the form
+//     <ifxname>/<token>_lnt, where token is unique to the test that is
+//     running.
+//
+//   - All links should be created using the DropLink type. This is to ensure
+//     tests that fail do not leave test links behind on the system.
 
 // Basic Tests ================================================================
 

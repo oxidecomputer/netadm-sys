@@ -279,12 +279,10 @@ pub fn get_persistent_ipinfo(
 
         // NOTE! somehwere in the packing process an 8 byte padd is added
         // between the header and the first nvpair
-        let sk = ((nvh.offset(1) as *const NvHeader) as *const u8).offset(0)
-            as *const u8;
+        let sk = ((nvh.offset(1) as *const NvHeader) as *const u8).offset(0);
         let skipped = std::slice::from_raw_parts(sk, 8);
         warn!("skipping {:x?}", skipped);
-        let p = ((nvh.offset(1) as *const NvHeader) as *const u8).offset(8)
-            as *const u8;
+        let p = ((nvh.offset(1) as *const NvHeader) as *const u8).offset(8);
 
         // NOTE! i've observed that `nval_size` can be larger than the
         // actual size of the list. We are relying on zero-sized nvpair
@@ -610,7 +608,7 @@ fn extract_nvp(nvp: *const NvPair) -> Result<NVP<'static>, String> {
         //// extract name
 
         trace!("nvp: {:?}", *nvp);
-        let p = ((nvp.offset(1) as *const NvPair) as *const u8) as *mut u8;
+        let p = (nvp.offset(1) as *const u8) as *mut u8;
         let name = {
             let slice =
                 std::slice::from_raw_parts(p, (*nvp).name_size as usize);
