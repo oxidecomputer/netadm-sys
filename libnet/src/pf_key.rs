@@ -111,7 +111,7 @@ pub enum SaState {
     Dead,
 }
 
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct Header {
     pub version: u8,
     pub typ: MessageType,
@@ -123,7 +123,7 @@ pub struct Header {
     pub pid: u32,
 }
 
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct Association {
     pub len: u16,
     pub typ: SaExtType,
@@ -135,7 +135,7 @@ pub struct Association {
     pub flags: u32,
 }
 
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct Lifetime {
     pub len: u16,
     pub typ: SaExtType,
@@ -145,7 +145,7 @@ pub struct Lifetime {
     pub usetime: u64,
 }
 
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct Address {
     pub len: u16,
     pub typ: SaExtType,
@@ -155,7 +155,7 @@ pub struct Address {
     pub sockaddr: SockAddr,
 }
 
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct Key {
     pub len: u16,
     pub typ: SaExtType,
@@ -164,7 +164,7 @@ pub struct Key {
     pub data: [u8; MAX_KEY_SIZE],
 }
 
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct TcpMd5AddKeyRequest {
     pub header: Header,
     pub association: Association,
@@ -174,7 +174,7 @@ pub struct TcpMd5AddKeyRequest {
     pub key: Key,
 }
 
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct TcpMd5DeleteKeyRequest {
     pub header: Header,
     pub association: Association,
