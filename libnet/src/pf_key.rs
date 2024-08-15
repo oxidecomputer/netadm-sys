@@ -95,41 +95,41 @@ pub enum SaExtType {
 #[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone)]
 #[repr(u8)]
 pub enum SaAuthType {
-    None,
-    Md5,
-    Md5Hmac,
-    Sha1Hmac,
-    Sha256Hmac,
-    Sha384Hmac,
-    Sha512Hmac,
+    None = 0,
+    Md5 = 1,
+    Md5Hmac = 2,
+    Sha1Hmac = 3,
+    Sha256Hmac = 5,
+    Sha384Hmac = 6,
+    Sha512Hmac = 7,
 }
 
 /// PF_KEY security association encryption types.
 #[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone)]
 #[repr(u8)]
 pub enum SaEncryptType {
-    None,
-    DesCbc,
-    DesCbc3,
-    Blowfish,
-    Null,
-    Aes,
-    AesCcm8,
-    AesCcm12,
-    AesCcm16,
-    AesGcm8,
-    AesGcm12,
-    AesGcm16,
+    None = 0,
+    DesCbc = 2,
+    DesCbc3 = 3,
+    Blowfish = 7,
+    Null = 11,
+    Aes = 12,
+    AesCcm8 = 14,
+    AesCcm12 = 15,
+    AesCcm16 = 16,
+    AesGcm8 = 18,
+    AesGcm12 = 19,
+    AesGcm16 = 20,
 }
 
 /// PF_KEY security association states.
 #[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone)]
 #[repr(u8)]
 pub enum SaState {
-    Larval,
-    Mature,
-    Dying,
-    Dead,
+    Larval = 0,
+    Mature = 1,
+    Dying = 2,
+    Dead = 3,
 }
 
 /// A PF_KEY security association header.
@@ -237,25 +237,25 @@ pub struct Lifetime {
 
 impl Lifetime {
     /// Create a hard lifetime extension.
-    pub fn hard(addtime: Duration, usetime: Duration) -> Self {
+    pub fn hard(addtime: Duration) -> Self {
         Lifetime {
             len: u16::try_from(size_of::<Lifetime>()).unwrap() >> 3,
             typ: SaExtType::LifetimeHard,
             alloc: 0, // no allocation limit
             bytes: 0, // no byte limit
             addtime: addtime.as_secs(),
-            usetime: usetime.as_secs(),
+            usetime: 0,
         }
     }
     /// Create a soft lifetime extension.
-    pub fn soft(addtime: Duration, usetime: Duration) -> Self {
+    pub fn soft(addtime: Duration) -> Self {
         Lifetime {
             len: u16::try_from(size_of::<Lifetime>()).unwrap() >> 3,
             typ: SaExtType::LifetimeSoft,
             alloc: 0, // no allocation limit
             bytes: 0, // no byte limit
             addtime: addtime.as_secs(),
-            usetime: usetime.as_secs(),
+            usetime: 0,
         }
     }
 }
@@ -386,9 +386,9 @@ impl StrAuth {
     }
 }
 
-/// A packet to add or update a TCP-MD5 security association.
+/// A packet to add a TCP-MD5 security association.
 #[repr(C, packed)]
-pub struct TcpMd5SetKeyRequest {
+pub struct TcpMd5AddKeyRequest {
     /// Packet header.
     pub header: Header,
     /// Association info.
@@ -403,28 +403,57 @@ pub struct TcpMd5SetKeyRequest {
     pub key: StrAuth,
 }
 
-impl TcpMd5SetKeyRequest {
-    /// Create a new TCP-MD5 set key request.
+impl TcpMd5AddKeyRequest {
+    /// Create a new TCP-MD5 add key request.
     pub fn new(
         src: SockAddr,
         dst: SockAddr,
         authstring: &str,
         valid_time: Duration,
-        update: bool,
     ) -> Self {
-        let mtype = if update {
-            MessageType::Update
-        } else {
-            MessageType::Add
-        };
-
         Self {
-            header: Header::new(mtype, SaType::TcpSig, size_of::<Self>()),
+            header: Header::new(
+                MessageType::Add,
+                SaType::TcpSig,
+                size_of::<Self>(),
+            ),
             association: Association::default(),
-            lifetime: Lifetime::hard(valid_time, valid_time),
+            lifetime: Lifetime::hard(valid_time),
             src: Address::src(src, IPPROTO_TCP as u8),
             dst: Address::dst(dst, IPPROTO_TCP as u8),
             key: StrAuth::new(authstring),
+        }
+    }
+}
+
+/// A packet to update a TCP-MD5 security association.
+#[repr(C, packed)]
+pub struct TcpMd5UpdateKeyRequest {
+    /// Packet header.
+    pub header: Header,
+    /// Association info.
+    pub association: Association,
+    /// Lifetime info.
+    pub lifetime: Lifetime,
+    /// Source socket address to bind to.
+    pub src: Address,
+    /// Destination socket address to bind to.
+    pub dst: Address,
+}
+
+impl TcpMd5UpdateKeyRequest {
+    /// Create a new TCP-MD5 update key request.
+    pub fn new(src: SockAddr, dst: SockAddr, valid_time: Duration) -> Self {
+        Self {
+            header: Header::new(
+                MessageType::Update,
+                SaType::TcpSig,
+                size_of::<Self>(),
+            ),
+            association: Association::default(),
+            lifetime: Lifetime::hard(valid_time),
+            src: Address::src(src, IPPROTO_TCP as u8),
+            dst: Address::dst(dst, IPPROTO_TCP as u8),
         }
     }
 }
@@ -496,41 +525,15 @@ pub struct GetAssociationResponse {
 
 /// Add a TCP-MD5 security association for the provided source and destination
 /// address with `authstring` as the key that is valid for `valid_time` after
-/// creation.
+/// creation. If update is true, this is treated as an update to an existing
+/// association, otherwise a new association is created.
 pub fn tcp_md5_key_add(
     src: SockAddr,
     dst: SockAddr,
     authstring: &str,
     valid_time: Duration,
 ) -> Result<(), Error> {
-    tcp_md5_key_set(src, dst, authstring, valid_time, false)
-}
-
-/// Update a TCP-MD5 security association for the provided source and destination
-/// address with `authstring` as the key that is valid for `valid_time` after
-/// creation.
-pub fn tcp_md5_key_update(
-    src: SockAddr,
-    dst: SockAddr,
-    authstring: &str,
-    valid_time: Duration,
-) -> Result<(), Error> {
-    tcp_md5_key_set(src, dst, authstring, valid_time, true)
-}
-
-/// Set a TCP-MD5 security association for the provided source and destination
-/// address with `authstring` as the key that is valid for `valid_time` after
-/// creation. If update is true, this is treated as an update to an existing
-/// association, otherwise a new association is created.
-pub fn tcp_md5_key_set(
-    src: SockAddr,
-    dst: SockAddr,
-    authstring: &str,
-    valid_time: Duration,
-    update: bool,
-) -> Result<(), Error> {
-    let msg =
-        TcpMd5SetKeyRequest::new(src, dst, authstring, valid_time, update);
+    let msg = TcpMd5AddKeyRequest::new(src, dst, authstring, valid_time);
     let mut sock = Socket::new(
         Domain::from(PF_KEY),
         Type::RAW,
@@ -538,8 +541,53 @@ pub fn tcp_md5_key_set(
     )?;
     let data = unsafe {
         std::slice::from_raw_parts(
-            (&msg as *const TcpMd5SetKeyRequest) as *const u8,
-            size_of::<TcpMd5SetKeyRequest>(),
+            (&msg as *const TcpMd5AddKeyRequest) as *const u8,
+            size_of::<TcpMd5AddKeyRequest>(),
+        )
+    };
+    let n = sock.write(data)?;
+    if n != data.len() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            format!("short write {} != {}", n, data.len()),
+        )
+        .into());
+    }
+
+    let mut buf = [0u8; 1024];
+    let _n = sock.read(&mut buf)?;
+    let response = unsafe { &*(buf.as_ptr() as *const Header) };
+
+    if response.errno != 0 {
+        return Err(Error::PfKey {
+            errno: response.errno,
+            typ: response.typ,
+            sa_typ: response.sa_typ,
+            diagnostic: response.reserved,
+        });
+    }
+
+    Ok(())
+}
+
+/// Update a TCP-MD5 security association for the provided source and
+/// destination. This function is primarily for updating the lifetime
+/// of the security association.
+pub fn tcp_md5_key_update(
+    src: SockAddr,
+    dst: SockAddr,
+    valid_time: Duration,
+) -> Result<(), Error> {
+    let msg = TcpMd5UpdateKeyRequest::new(src, dst, valid_time);
+    let mut sock = Socket::new(
+        Domain::from(PF_KEY),
+        Type::RAW,
+        Some(Protocol::from(i32::from(PF_KEY_V2))),
+    )?;
+    let data = unsafe {
+        std::slice::from_raw_parts(
+            (&msg as *const TcpMd5UpdateKeyRequest) as *const u8,
+            size_of::<TcpMd5UpdateKeyRequest>(),
         )
     };
     let n = sock.write(data)?;
