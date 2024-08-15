@@ -275,6 +275,7 @@ pub union In6Data {
 }
 
 impl Copy for In6Data {}
+#[allow(clippy::non_canonical_clone_impl)]
 impl Clone for In6Data {
     fn clone(&self) -> Self {
         unsafe {
@@ -748,7 +749,7 @@ fn is_plumbed_for_af(name: &str, sock: &Socket) -> bool {
     for (i, c) in name.chars().enumerate() {
         req.lifr_name[i] = c as c_char;
     }
-    unsafe { matches!(ioctl!(sock, sys::SIOCGLIFFLAGS, &mut req), Ok(_)) }
+    unsafe { ioctl!(sock, sys::SIOCGLIFFLAGS, &mut req).is_ok() }
 }
 
 fn plumb_for_af(name: &str, mut ifflags: u64) -> Result<(), Error> {
@@ -953,6 +954,7 @@ fn str_ioctl(
     unsafe { ioctl!(s, sys::I_STR, &mut ioc) }
 }
 
+#[allow(dead_code)]
 pub struct IfSpec {
     pub ppa: u32,
     pub lun: u32,

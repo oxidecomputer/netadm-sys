@@ -6,8 +6,9 @@ use colored::*;
 use libnet::{
     self, add_route, create_ipaddr, create_simnet_link, create_tfport_link,
     create_vnic_link, get_ipaddr_info, get_ipaddrs, get_link, get_links, ip,
-    route, sys::MAXMACADDRLEN, IpNet, IpState, LinkFlags, LinkHandle,
+    route, sys::MAXMACADDRLEN, IpState, LinkFlags, LinkHandle,
 };
+use oxnet::IpNet;
 use std::io::{stdout, Write};
 use std::net::{IpAddr, Ipv6Addr};
 use std::str;
