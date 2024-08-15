@@ -672,9 +672,9 @@ mod parse {
     pub fn header(buf: &mut &[u8]) -> PResult<Header> {
         Ok(Header {
             version: le_u8.parse_next(buf)?,
-            typ: parse::message_type.parse_next(buf)?,
+            typ: message_type.parse_next(buf)?,
             errno: le_u8.parse_next(buf)?,
-            sa_typ: parse::sa_type.parse_next(buf)?,
+            sa_typ: sa_type.parse_next(buf)?,
             len: le_u16.parse_next(buf)?,
             reserved: le_u16.parse_next(buf)?,
             seq: le_u32.parse_next(buf)?,
@@ -684,22 +684,21 @@ mod parse {
 
     pub fn extension(buf: &mut &[u8]) -> PResult<Extension> {
         let len = le_u16.parse_next(buf)?;
-        let typ = parse::sa_ext_type.parse_next(buf)?;
-        println!("{typ:?}");
+        let typ = sa_ext_type.parse_next(buf)?;
         Ok(match typ {
             SaExtType::Sa => {
-                Extension::Association(parse::association(len).parse_next(buf)?)
+                Extension::Association(association(len).parse_next(buf)?)
             }
             SaExtType::LifetimeCurrent
             | SaExtType::LifetimeHard
             | SaExtType::LifetimeSoft => {
-                Extension::Lifetime(parse::lifetime(len, typ).parse_next(buf)?)
+                Extension::Lifetime(lifetime(len, typ).parse_next(buf)?)
             }
             SaExtType::AddressSrc | SaExtType::AddressDst => {
-                Extension::Address(parse::address(len, typ).parse_next(buf)?)
+                Extension::Address(address(len, typ).parse_next(buf)?)
             }
             SaExtType::StrAuth => {
-                Extension::StrAuth(parse::str_auth(len).parse_next(buf)?)
+                Extension::StrAuth(str_auth(len).parse_next(buf)?)
             }
         })
     }
@@ -713,9 +712,9 @@ mod parse {
                 typ: SaExtType::Sa,
                 spi: le_u32.parse_next(buf)?,
                 replay: le_u8.parse_next(buf)?,
-                state: parse::sa_state.parse_next(buf)?,
-                auth: parse::sa_auth_type.parse_next(buf)?,
-                encrypt: parse::sa_encrypt_type.parse_next(buf)?,
+                state: sa_state.parse_next(buf)?,
+                auth: sa_auth_type.parse_next(buf)?,
+                encrypt: sa_encrypt_type.parse_next(buf)?,
                 flags: le_u32.parse_next(buf)?,
             })
         }
