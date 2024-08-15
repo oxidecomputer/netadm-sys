@@ -156,7 +156,7 @@ pub struct Header {
 }
 
 impl Header {
-    fn new(typ: MessageType, sa_typ: SaType, len: usize) -> Self {
+    pub fn new(typ: MessageType, sa_typ: SaType, len: usize) -> Self {
         Header {
             version: PF_KEY_V2,
             typ,
@@ -236,10 +236,22 @@ pub struct Lifetime {
 }
 
 impl Lifetime {
-    fn new(addtime: Duration, usetime: Duration) -> Self {
+    /// Create a hard lifetime extension.
+    pub fn hard(addtime: Duration, usetime: Duration) -> Self {
         Lifetime {
             len: u16::try_from(size_of::<Lifetime>()).unwrap() >> 3,
             typ: SaExtType::LifetimeHard,
+            alloc: 0, // no allocation limit
+            bytes: 0, // no byte limit
+            addtime: addtime.as_secs(),
+            usetime: usetime.as_secs(),
+        }
+    }
+    /// Create a soft lifetime extension.
+    pub fn soft(addtime: Duration, usetime: Duration) -> Self {
+        Lifetime {
+            len: u16::try_from(size_of::<Lifetime>()).unwrap() >> 3,
+            typ: SaExtType::LifetimeSoft,
             alloc: 0, // no allocation limit
             bytes: 0, // no byte limit
             addtime: addtime.as_secs(),
@@ -288,17 +300,17 @@ impl std::fmt::Debug for Address {
 
 impl Address {
     /// Create a new source address extension.
-    fn src(sockaddr: SockAddr, proto: u8) -> Self {
+    pub fn src(sockaddr: SockAddr, proto: u8) -> Self {
         Self::new(sockaddr, proto, SaExtType::AddressSrc)
     }
 
     /// Create a new destination address extension.
-    fn dst(sockaddr: SockAddr, proto: u8) -> Self {
+    pub fn dst(sockaddr: SockAddr, proto: u8) -> Self {
         Self::new(sockaddr, proto, SaExtType::AddressDst)
     }
 
     /// Create a new address extension.
-    fn new(sockaddr: SockAddr, proto: u8, typ: SaExtType) -> Self {
+    pub fn new(sockaddr: SockAddr, proto: u8, typ: SaExtType) -> Self {
         Address {
             len: u16::try_from(size_of::<Address>()).unwrap() >> 3,
             typ,
@@ -352,7 +364,7 @@ impl std::fmt::Debug for StrAuth {
 
 impl StrAuth {
     /// Create a new string authentication extension for a given key.
-    fn new(authstring: &str) -> Self {
+    pub fn new(authstring: &str) -> Self {
         let mut key = StrAuth {
             len: u16::try_from(size_of::<StrAuth>()).unwrap() >> 3,
             typ: SaExtType::StrAuth,
@@ -393,7 +405,7 @@ pub struct TcpMd5SetKeyRequest {
 
 impl TcpMd5SetKeyRequest {
     /// Create a new TCP-MD5 set key request.
-    fn new(
+    pub fn new(
         src: SockAddr,
         dst: SockAddr,
         authstring: &str,
@@ -409,7 +421,7 @@ impl TcpMd5SetKeyRequest {
         Self {
             header: Header::new(mtype, SaType::TcpSig, size_of::<Self>()),
             association: Association::default(),
-            lifetime: Lifetime::new(valid_time, valid_time),
+            lifetime: Lifetime::hard(valid_time, valid_time),
             src: Address::src(src, IPPROTO_TCP as u8),
             dst: Address::dst(dst, IPPROTO_TCP as u8),
             key: StrAuth::new(authstring),
@@ -431,7 +443,8 @@ pub struct TcpMd5DeleteKeyRequest {
 }
 
 impl TcpMd5DeleteKeyRequest {
-    fn new(src: SockAddr, dst: SockAddr) -> Self {
+    /// Create a new TCP-MD5 delete key request.
+    pub fn new(src: SockAddr, dst: SockAddr) -> Self {
         Self {
             header: Header::new(
                 MessageType::Delete,
@@ -459,7 +472,8 @@ pub struct TcpMd5GetKeyRequest {
 }
 
 impl TcpMd5GetKeyRequest {
-    fn new(src: SockAddr, dst: SockAddr) -> Self {
+    /// Create a new TCP-MD5 get key request.
+    pub fn new(src: SockAddr, dst: SockAddr) -> Self {
         Self {
             header: Header::new(
                 MessageType::Get,
