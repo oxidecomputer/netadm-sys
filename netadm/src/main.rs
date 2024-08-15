@@ -3,7 +3,7 @@
 use anyhow::{anyhow, Result};
 use clap::{Parser, ValueEnum};
 use colored::*;
-use libnet::pf_key::{tcp_md5_key_remove, tcp_md5_key_set};
+use libnet::pf_key::{tcp_md5_key_get, tcp_md5_key_remove, tcp_md5_key_set};
 use libnet::{
     self, add_route, create_ipaddr, create_simnet_link, create_tfport_link,
     create_vnic_link, get_ipaddr_info, get_ipaddrs, get_link, get_links, ip,
@@ -90,6 +90,8 @@ enum ShowSubCommand {
     Route(ShowRoute),
     /// Show neighbor
     Neighbor(ShowNeighbor),
+    ///Show a TCP/MD5 security association
+    TcpMd5(ShowTcpMd5),
 }
 
 #[derive(Parser)]
@@ -222,6 +224,14 @@ struct CreateTcpMd5 {
 }
 
 #[derive(Parser)]
+struct ShowTcpMd5 {
+    /// Source address and port
+    src: SocketAddr,
+    /// Destination address and port
+    dst: SocketAddr,
+}
+
+#[derive(Parser)]
 struct DeleteRoute {
     /// Route destination
     destination: IpNet,
@@ -314,6 +324,10 @@ fn main() {
             },
             ShowSubCommand::Neighbor(ref n) => match show_neighbor(&opts, s, n)
             {
+                Ok(()) => {}
+                Err(e) => error!("{}", e),
+            },
+            ShowSubCommand::TcpMd5(ref t) => match show_tcp_md5(&opts, s, t) {
                 Ok(()) => {}
                 Err(e) => error!("{}", e),
             },
@@ -712,6 +726,12 @@ fn show_neighbor(_opts: &Opts, _s: &Show, sn: &ShowNeighbor) -> Result<()> {
         m[0], m[1], m[2], m[3], m[4], m[5], flags,
     );
 
+    Ok(())
+}
+
+fn show_tcp_md5(_opts: &Opts, _s: &Show, c: &ShowTcpMd5) -> Result<()> {
+    let k = tcp_md5_key_get(c.src.into(), c.dst.into())?;
+    println!("{:#?}", k);
     Ok(())
 }
 
