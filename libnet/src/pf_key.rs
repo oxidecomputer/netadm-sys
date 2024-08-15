@@ -559,6 +559,12 @@ pub fn tcp_md5_key_add(
     let response = unsafe { &*(buf.as_ptr() as *const Header) };
 
     if response.errno != 0 {
+        if response.seq != msg.header.seq {
+            return Err(Error::PfKeySequenceMismatch {
+                expected: msg.header.seq,
+                received: response.seq,
+            });
+        }
         return Err(Error::PfKey {
             errno: response.errno,
             typ: response.typ,
@@ -604,6 +610,12 @@ pub fn tcp_md5_key_update(
     let response = unsafe { &*(buf.as_ptr() as *const Header) };
 
     if response.errno != 0 {
+        if response.seq != msg.header.seq {
+            return Err(Error::PfKeySequenceMismatch {
+                expected: msg.header.seq,
+                received: response.seq,
+            });
+        }
         return Err(Error::PfKey {
             errno: response.errno,
             typ: response.typ,
@@ -690,6 +702,12 @@ pub fn tcp_md5_key_remove(src: SockAddr, dst: SockAddr) -> Result<(), Error> {
     let response = unsafe { &*(buf.as_ptr() as *const Header) };
 
     if response.errno != 0 {
+        if response.seq != msg.header.seq {
+            return Err(Error::PfKeySequenceMismatch {
+                expected: msg.header.seq,
+                received: response.seq,
+            });
+        }
         return Err(Error::PfKey {
             errno: response.errno,
             typ: response.typ,
@@ -717,6 +735,9 @@ pub enum Error {
 
     #[error("pfkey parse {0}")]
     PfKeyParse(String),
+
+    #[error("pfkey sequence mismatch {expected} {received}")]
+    PfKeySequenceMismatch { expected: u32, received: u32 },
 }
 
 mod parse {
