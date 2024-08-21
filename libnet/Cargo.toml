@@ -23,3 +23,5 @@ dlpi = { git = "https://github.com/oxidecomputer/dlpi-sys" }
 num_enum = "0.5.7"
 oxnet = { git = "https://github.com/oxidecomputer/oxnet" }
 rusty-doors = { git = "https://github.com/oxidecomputer/rusty-doors" }
+rand = "0.8.5"
+winnow = "0.6.18"

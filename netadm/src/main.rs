@@ -3,6 +3,9 @@
 use anyhow::{anyhow, Result};
 use clap::{Parser, ValueEnum};
 use colored::*;
+use libnet::pf_key::{
+    tcp_md5_key_add, tcp_md5_key_get, tcp_md5_key_remove, tcp_md5_key_update,
+};
 use libnet::{
     self, add_route, create_ipaddr, create_simnet_link, create_tfport_link,
     create_vnic_link, get_ipaddr_info, get_ipaddrs, get_link, get_links, ip,
@@ -10,7 +13,7 @@ use libnet::{
 };
 use oxnet::IpNet;
 use std::io::{stdout, Write};
-use std::net::{IpAddr, Ipv6Addr};
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::str;
 use tabwriter::TabWriter;
 use tracing::error;
@@ -89,6 +92,8 @@ enum ShowSubCommand {
     Route(ShowRoute),
     /// Show neighbor
     Neighbor(ShowNeighbor),
+    ///Show a TCP/MD5 security association
+    TcpMd5(ShowTcpMd5),
 }
 
 #[derive(Parser)]
@@ -103,6 +108,8 @@ enum CreateSubCommand {
     Addr(CreateAddr),
     /// create a route
     Route(CreateRoute),
+    /// Create a TCP/MD5 security association
+    TcpMd5(CreateTcpMd5),
 }
 
 #[derive(Parser)]
@@ -152,6 +159,8 @@ enum DeleteSubCommand {
     Addr(DeleteAddr),
     /// Delete a route
     Route(DeleteRoute),
+    /// Delete a TCP-MD5 security association
+    TcpMd5(DeleteTcpMd5),
 }
 
 #[derive(Parser)]
@@ -202,6 +211,29 @@ struct CreateRoute {
 }
 
 #[derive(Parser)]
+struct CreateTcpMd5 {
+    /// Source address and port
+    src: SocketAddr,
+    /// Destination address and port
+    dst: SocketAddr,
+    /// Authorization string
+    authstring: String,
+    /// How long the association is valid for
+    valid_time: humantime::Duration,
+    /// Treat this as an update instead of a create
+    #[clap(long)]
+    update: bool,
+}
+
+#[derive(Parser)]
+struct ShowTcpMd5 {
+    /// Source address and port
+    src: SocketAddr,
+    /// Destination address and port
+    dst: SocketAddr,
+}
+
+#[derive(Parser)]
 struct DeleteRoute {
     /// Route destination
     destination: IpNet,
@@ -209,6 +241,14 @@ struct DeleteRoute {
     gateway: IpAddr,
     /// Route interface
     interface: Option<String>,
+}
+
+#[derive(Parser)]
+struct DeleteTcpMd5 {
+    /// Source address and port
+    src: SocketAddr,
+    /// Destination address and port
+    dst: SocketAddr,
 }
 
 #[derive(Parser)]
@@ -289,6 +329,10 @@ fn main() {
                 Ok(()) => {}
                 Err(e) => error!("{}", e),
             },
+            ShowSubCommand::TcpMd5(ref t) => match show_tcp_md5(&opts, s, t) {
+                Ok(()) => {}
+                Err(e) => error!("{}", e),
+            },
         },
         SubCommand::Create(ref c) => match c.subcmd {
             CreateSubCommand::Simnet(ref sim) => {
@@ -321,6 +365,12 @@ fn main() {
                     Err(e) => error!("{}", e),
                 }
             }
+            CreateSubCommand::TcpMd5(ref tcpmd5) => {
+                match create_tcp_md5(&opts, c, tcpmd5) {
+                    Ok(()) => {}
+                    Err(e) => error!("{}", e),
+                }
+            }
         },
         SubCommand::Delete(ref d) => match d.subcmd {
             DeleteSubCommand::Link(ref lnk) => {
@@ -337,6 +387,12 @@ fn main() {
             }
             DeleteSubCommand::Route(ref route) => {
                 match delete_route(&opts, d, route) {
+                    Ok(()) => {}
+                    Err(e) => error!("{}", e),
+                }
+            }
+            DeleteSubCommand::TcpMd5(ref tcpmd5) => {
+                match delete_tcp_md5(&opts, d, tcpmd5) {
                     Ok(()) => {}
                     Err(e) => error!("{}", e),
                 }
@@ -425,9 +481,28 @@ fn create_route(_opts: &Opts, _c: &Create, c: &CreateRoute) -> Result<()> {
     Ok(())
 }
 
+fn create_tcp_md5(_opts: &Opts, _c: &Create, c: &CreateTcpMd5) -> Result<()> {
+    if c.update {
+        tcp_md5_key_update(c.src.into(), c.dst.into(), c.valid_time.into())?;
+    } else {
+        tcp_md5_key_add(
+            c.src.into(),
+            c.dst.into(),
+            &c.authstring,
+            c.valid_time.into(),
+        )?;
+    }
+    Ok(())
+}
+
 fn delete_route(_opts: &Opts, _c: &Delete, c: &DeleteRoute) -> Result<()> {
     libnet::delete_route(c.destination, c.gateway, c.interface.clone())?;
     // should we print back?
+    Ok(())
+}
+
+fn delete_tcp_md5(_opts: &Opts, _c: &Delete, c: &DeleteTcpMd5) -> Result<()> {
+    tcp_md5_key_remove(c.src.into(), c.dst.into())?;
     Ok(())
 }
 
@@ -656,6 +731,12 @@ fn show_neighbor(_opts: &Opts, _s: &Show, sn: &ShowNeighbor) -> Result<()> {
         m[0], m[1], m[2], m[3], m[4], m[5], flags,
     );
 
+    Ok(())
+}
+
+fn show_tcp_md5(_opts: &Opts, _s: &Show, c: &ShowTcpMd5) -> Result<()> {
+    let k = tcp_md5_key_get(c.src.into(), c.dst.into())?;
+    println!("{:#?}", k);
     Ok(())
 }
 
