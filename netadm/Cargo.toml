@@ -14,4 +14,4 @@ tracing = "0.1"
 tracing-subscriber = "0.2"
 anstyle = "1.0.0"
 humantime = "2.1.0"
-oxnet = { git = "https://github.com/oxidecomputer/oxnet" }
+oxnet = { version = "0.1.0", default-features = false }
