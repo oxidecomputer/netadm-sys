@@ -3,3 +3,8 @@
 # the buildomat integration to create check suites.
 #
 enable = true
+
+allow_users = [
+	"oxide-renovate[bot]",
+	"renovate[bot]",
+]
