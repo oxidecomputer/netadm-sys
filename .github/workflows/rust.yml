@@ -25,6 +25,7 @@ jobs:
           cargo doc --no-deps --target x86_64-unknown-illumos
         
       - name: prep deployment branch
+        if: github.ref == 'refs/heads/main'
         run: |
           mkdir -p dist
           cp -r target/x86_64-unknown-illumos/doc/* dist/
@@ -36,6 +37,7 @@ jobs:
           git commit -m 'deploy'
           
       - name: push deployment branch
+        if: github.ref == 'refs/heads/main'
         uses: ad-m/github-push-action@d91a481090679876dfc4178fef17f286781251df # v0.8.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
