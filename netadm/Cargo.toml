@@ -9,7 +9,7 @@ anyhow = "1.0"
 clap = { version = "4", features = ["derive", "unstable-styles"] }
 libnet = { path = "../libnet" }
 tabwriter = { version = "1", features = ["ansi_formatting"] }
-colored = "2"
+colored = "3"
 tracing = "0.1"
 tracing-subscriber = "0.2"
 anstyle = "1.0.10"
