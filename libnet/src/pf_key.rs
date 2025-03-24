@@ -12,7 +12,7 @@ use winnow::binary::{le_u16, le_u32, le_u64, le_u8};
 use winnow::combinator::repeat;
 use winnow::error::{ContextError, ErrMode};
 use winnow::token::take;
-use winnow::{PResult, Parser};
+use winnow::{ModalResult, Parser};
 
 /// The PF_KEY protocol family.
 const PF_KEY: i32 = 27;
@@ -745,14 +745,14 @@ mod parse {
 
     pub fn association_response(
         buf: &mut &[u8],
-    ) -> PResult<GetAssociationResponse> {
+    ) -> ModalResult<GetAssociationResponse> {
         Ok(GetAssociationResponse {
             header: header.parse_next(buf)?,
             extensions: repeat(0.., extension).parse_next(buf)?,
         })
     }
 
-    pub fn header(buf: &mut &[u8]) -> PResult<Header> {
+    pub fn header(buf: &mut &[u8]) -> ModalResult<Header> {
         Ok(Header {
             version: le_u8.parse_next(buf)?,
             typ: message_type.parse_next(buf)?,
@@ -765,7 +765,7 @@ mod parse {
         })
     }
 
-    pub fn extension(buf: &mut &[u8]) -> PResult<Extension> {
+    pub fn extension(buf: &mut &[u8]) -> ModalResult<Extension> {
         let len = le_u16.parse_next(buf)?;
         let typ = sa_ext_type.parse_next(buf)?;
         Ok(match typ {
@@ -788,8 +788,8 @@ mod parse {
 
     pub fn association(
         len: u16,
-    ) -> impl FnMut(&mut &[u8]) -> PResult<Association> {
-        move |buf: &mut &[u8]| -> PResult<Association> {
+    ) -> impl FnMut(&mut &[u8]) -> ModalResult<Association> {
+        move |buf: &mut &[u8]| -> ModalResult<Association> {
             Ok(Association {
                 len,
                 typ: SaExtType::Sa,
@@ -806,8 +806,8 @@ mod parse {
     pub fn lifetime(
         len: u16,
         typ: SaExtType,
-    ) -> impl FnMut(&mut &[u8]) -> PResult<Lifetime> {
-        move |buf: &mut &[u8]| -> PResult<Lifetime> {
+    ) -> impl FnMut(&mut &[u8]) -> ModalResult<Lifetime> {
+        move |buf: &mut &[u8]| -> ModalResult<Lifetime> {
             Ok(Lifetime {
                 len,
                 typ,
@@ -822,8 +822,8 @@ mod parse {
     pub fn address(
         len: u16,
         typ: SaExtType,
-    ) -> impl FnMut(&mut &[u8]) -> PResult<Address> {
-        move |buf: &mut &[u8]| -> PResult<Address> {
+    ) -> impl FnMut(&mut &[u8]) -> ModalResult<Address> {
+        move |buf: &mut &[u8]| -> ModalResult<Address> {
             let sockaddr_len = ((len as usize) << 3)
                 - (size_of::<Address>() - size_of::<SockAddr>());
             Ok(Address {
@@ -842,10 +842,12 @@ mod parse {
         }
     }
 
-    pub fn str_auth(len: u16) -> impl FnMut(&mut &[u8]) -> PResult<StrAuth> {
+    pub fn str_auth(
+        len: u16,
+    ) -> impl FnMut(&mut &[u8]) -> ModalResult<StrAuth> {
         let data_len = ((len as usize) << 3)
             - (size_of::<StrAuth>() - MAX_STR_AUTH_KEY_SIZE);
-        move |buf: &mut &[u8]| -> PResult<StrAuth> {
+        move |buf: &mut &[u8]| -> ModalResult<StrAuth> {
             Ok(StrAuth {
                 len,
                 typ: SaExtType::StrAuth,
@@ -861,37 +863,37 @@ mod parse {
         }
     }
 
-    pub fn message_type(buf: &mut &[u8]) -> PResult<MessageType> {
+    pub fn message_type(buf: &mut &[u8]) -> ModalResult<MessageType> {
         let value = le_u8.parse_next(buf)?;
         MessageType::try_from_primitive(value)
             .map_err(|_| ErrMode::Backtrack(ContextError::new()))
     }
 
-    pub fn sa_type(buf: &mut &[u8]) -> PResult<SaType> {
+    pub fn sa_type(buf: &mut &[u8]) -> ModalResult<SaType> {
         let value = le_u8.parse_next(buf)?;
         SaType::try_from_primitive(value)
             .map_err(|_| ErrMode::Backtrack(ContextError::new()))
     }
 
-    fn sa_ext_type(buf: &mut &[u8]) -> PResult<SaExtType> {
+    fn sa_ext_type(buf: &mut &[u8]) -> ModalResult<SaExtType> {
         let value = le_u16.parse_next(buf)?;
         SaExtType::try_from_primitive(value)
             .map_err(|_| ErrMode::Backtrack(ContextError::new()))
     }
 
-    fn sa_auth_type(buf: &mut &[u8]) -> PResult<SaAuthType> {
+    fn sa_auth_type(buf: &mut &[u8]) -> ModalResult<SaAuthType> {
         let value = le_u8.parse_next(buf)?;
         SaAuthType::try_from_primitive(value)
             .map_err(|_| ErrMode::Backtrack(ContextError::new()))
     }
 
-    fn sa_encrypt_type(buf: &mut &[u8]) -> PResult<SaEncryptType> {
+    fn sa_encrypt_type(buf: &mut &[u8]) -> ModalResult<SaEncryptType> {
         let value = le_u8.parse_next(buf)?;
         SaEncryptType::try_from_primitive(value)
             .map_err(|_| ErrMode::Backtrack(ContextError::new()))
     }
 
-    fn sa_state(buf: &mut &[u8]) -> PResult<SaState> {
+    fn sa_state(buf: &mut &[u8]) -> ModalResult<SaState> {
         let value = le_u8.parse_next(buf)?;
         SaState::try_from_primitive(value)
             .map_err(|_| ErrMode::Backtrack(ContextError::new()))
