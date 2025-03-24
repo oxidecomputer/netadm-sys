@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.64"
 
 [dependencies]
-colored = "2"
+colored = "3"
 cfg-if = "1.0"
 tracing = "0.1"
 thiserror = "1"
