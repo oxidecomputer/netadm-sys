@@ -21,7 +21,7 @@ nvpair-sys = { git = "https://github.com/jmesmon/rust-libzfs", branch = "master"
 
 dlpi = { git = "https://github.com/oxidecomputer/dlpi-sys" }
 num_enum = "0.5.7"
-oxnet = { version = "0.1.0", default-features = false }
+oxnet = { version = "0.1.1", default-features = false }
 rusty-doors = { git = "https://github.com/oxidecomputer/rusty-doors" }
 rand = "0.9.0"
 winnow = "0.6.18"
