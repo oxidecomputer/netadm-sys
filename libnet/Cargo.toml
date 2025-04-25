@@ -24,4 +24,4 @@ num_enum = "0.7.3"
 oxnet = { version = "0.1.1", default-features = false }
 rusty-doors = { git = "https://github.com/oxidecomputer/rusty-doors" }
 rand = "0.9.1"
-winnow = "0.7.6"
+winnow = "0.7.7"
