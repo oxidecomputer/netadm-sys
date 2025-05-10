@@ -14,4 +14,4 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["std", "env-filter"] }
 anstyle = "1.0.10"
 humantime = "2.2.0"
-oxnet = { version = "0.1.1", default-features = false }
+oxnet = { version = "0.1.2", default-features = false }
