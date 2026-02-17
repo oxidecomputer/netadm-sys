@@ -23,5 +23,5 @@ dlpi = { git = "https://github.com/oxidecomputer/dlpi-sys", default-features = f
 num_enum = "0.7.5"
 oxnet = { version = "0.1.4", default-features = false }
 rusty-doors = { git = "https://github.com/oxidecomputer/rusty-doors" }
-rand = "0.9.2"
+rand = "0.10.0"
 winnow = "0.7.14"
