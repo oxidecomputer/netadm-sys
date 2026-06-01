@@ -18,8 +18,6 @@ use winnow::{ModalResult, Parser};
 const PF_KEY: i32 = 27;
 /// The PF_KEY protocol version.
 const PF_KEY_V2: u8 = 2;
-/// Maximum size of a StrAuth key.
-const MAX_STR_AUTH_KEY_SIZE: usize = 80;
 
 /// PF_KEY message types.
 #[derive(Debug, IntoPrimitive, TryFromPrimitive, Copy, Clone)]
@@ -341,7 +339,7 @@ pub struct StrAuth {
     /// Reserved.
     pub reserved: u16,
     /// Key data.
-    pub data: [u8; MAX_STR_AUTH_KEY_SIZE],
+    pub data: [u8; StrAuth::MAX_KEY_LEN],
 }
 
 impl std::fmt::Debug for StrAuth {
@@ -363,24 +361,38 @@ impl std::fmt::Debug for StrAuth {
 }
 
 impl StrAuth {
+    /// Maximum size of a StrAuth key, in bytes.
+    pub const MAX_KEY_LEN: usize = 80;
+    /// Fixed-header bytes preceding the variable-length key payload.
+    const HEADER_LEN: usize = size_of::<Self>() - Self::MAX_KEY_LEN;
+
     /// Create a new string authentication extension for a given key.
-    pub fn new(authstring: &str) -> Self {
+    pub fn new(authstring: &str) -> Result<Self, Error> {
+        let key_len = authstring.len();
+        if key_len > Self::MAX_KEY_LEN {
+            return Err(Error::PfKeyParse(format!(
+                "authstring exceeds {} bytes",
+                Self::MAX_KEY_LEN
+            )));
+        }
         let mut key = StrAuth {
             len: u16::try_from(size_of::<StrAuth>()).unwrap() >> 3,
             typ: SaExtType::StrAuth,
-            bits: u16::try_from(authstring.len() << 3).unwrap(),
+            bits: u16::try_from(key_len << 3).unwrap(),
             reserved: 0,
-            data: [0; MAX_STR_AUTH_KEY_SIZE],
+            data: [0; Self::MAX_KEY_LEN],
         };
-        key.data[..authstring.len()].copy_from_slice(authstring.as_bytes());
-        key
+        key.data[..key_len].copy_from_slice(authstring.as_bytes());
+        Ok(key)
     }
 
     /// Return the key in string form.
     pub fn key(&self) -> String {
         let s = unsafe { (self as *const StrAuth).read_unaligned() };
         let bits = s.bits;
-        let bytelen = (bits >> 3) as usize;
+        // `bits` is wire-supplied; clamp so a bogus value can't index past the
+        // fixed key buffer.
+        let bytelen = ((bits >> 3) as usize).min(Self::MAX_KEY_LEN);
         let data = s.data;
         String::from_utf8_lossy(&data[..bytelen]).to_string()
     }
@@ -410,8 +422,8 @@ impl TcpMd5AddKeyRequest {
         dst: SockAddr,
         authstring: &str,
         valid_time: Duration,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, Error> {
+        Ok(Self {
             header: Header::new(
                 MessageType::Add,
                 SaType::TcpSig,
@@ -421,8 +433,8 @@ impl TcpMd5AddKeyRequest {
             lifetime: Lifetime::hard(valid_time),
             src: Address::src(src, IPPROTO_TCP as u8),
             dst: Address::dst(dst, IPPROTO_TCP as u8),
-            key: StrAuth::new(authstring),
-        }
+            key: StrAuth::new(authstring)?,
+        })
     }
 }
 
@@ -533,7 +545,7 @@ pub fn tcp_md5_key_add(
     authstring: &str,
     valid_time: Duration,
 ) -> Result<(), Error> {
-    let msg = TcpMd5AddKeyRequest::new(src, dst, authstring, valid_time);
+    let msg = TcpMd5AddKeyRequest::new(src, dst, authstring, valid_time)?;
     let mut sock = Socket::new(
         Domain::from(PF_KEY),
         Type::RAW,
@@ -845,9 +857,14 @@ mod parse {
     pub fn str_auth(
         len: u16,
     ) -> impl FnMut(&mut &[u8]) -> ModalResult<StrAuth> {
-        let data_len = ((len as usize) << 3)
-            - (size_of::<StrAuth>() - MAX_STR_AUTH_KEY_SIZE);
+        // `len` is the whole-extension size in 8-byte words and is taken
+        // straight off the wire. Derive the key-payload size defensively so a
+        // bogus length can neither underflow nor overrun the fixed key buffer.
         move |buf: &mut &[u8]| -> ModalResult<StrAuth> {
+            let data_len = ((len as usize) << 3)
+                .checked_sub(StrAuth::HEADER_LEN)
+                .filter(|n| *n <= StrAuth::MAX_KEY_LEN)
+                .ok_or_else(|| ErrMode::Cut(ContextError::new()))?;
             Ok(StrAuth {
                 len,
                 typ: SaExtType::StrAuth,
@@ -855,7 +872,7 @@ mod parse {
                 reserved: le_u16.parse_next(buf)?,
                 data: {
                     let x = take(data_len).parse_next(buf)?;
-                    let mut buf = [0; MAX_STR_AUTH_KEY_SIZE];
+                    let mut buf = [0; StrAuth::MAX_KEY_LEN];
                     buf[0..data_len].copy_from_slice(x);
                     buf
                 },
@@ -897,5 +914,64 @@ mod parse {
         let value = le_u8.parse_next(buf)?;
         SaState::try_from_primitive(value)
             .map_err(|_| ErrMode::Backtrack(ContextError::new()))
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        /// Build the bytes a `str_auth` parser expects (positioned after the
+        /// extension's len/typ, i.e. starting at `bits`).
+        fn str_auth_body(bits: u16, key: &[u8]) -> Vec<u8> {
+            let mut v = Vec::new();
+            v.extend_from_slice(&bits.to_le_bytes());
+            v.extend_from_slice(&0u16.to_le_bytes()); // reserved
+            v.extend_from_slice(key);
+            v
+        }
+
+        #[test]
+        fn str_auth_parses_max_key() {
+            let key = [b'k'; StrAuth::MAX_KEY_LEN];
+            let body = str_auth_body((key.len() as u16) << 3, &key);
+            // len is the whole-extension size in 8-byte words.
+            let len = ((StrAuth::HEADER_LEN + key.len()) / 8) as u16;
+
+            let mut input = body.as_slice();
+            let sa = str_auth(len).parse_next(&mut input).expect("valid");
+            assert!(input.is_empty(), "parser should consume the whole body");
+            assert_eq!(sa.key().as_bytes(), &key[..]);
+        }
+
+        #[test]
+        fn str_auth_rejects_overlong_len() {
+            // len encoding a payload > StrAuth::MAX_KEY_LEN must error rather
+            // than panic on the slice copy. Validation happens before any bytes
+            // are read, so an empty input is fine.
+            let mut input: &[u8] = &[];
+            assert!(str_auth(12).parse_next(&mut input).is_err());
+        }
+
+        #[test]
+        fn str_auth_rejects_undersized_len() {
+            // len too small to contain the fixed header must error rather than
+            // underflow the payload-length subtraction.
+            let mut input: &[u8] = &[];
+            assert!(str_auth(0).parse_next(&mut input).is_err());
+        }
+
+        #[test]
+        fn key_clamps_bogus_bits() {
+            // A wire-supplied bit length larger than the key buffer must not
+            // panic when read back via key().
+            let sa = StrAuth {
+                len: 0,
+                typ: SaExtType::StrAuth,
+                bits: u16::MAX,
+                reserved: 0,
+                data: [b'a'; StrAuth::MAX_KEY_LEN],
+            };
+            assert_eq!(sa.key().len(), StrAuth::MAX_KEY_LEN);
+        }
     }
 }
