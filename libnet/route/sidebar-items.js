@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Error"],"fn":["add_route","delete_route","ensure_route_present","get_route","get_routes"],"struct":["Route","RtMsg","SocketDlAddr"]};
