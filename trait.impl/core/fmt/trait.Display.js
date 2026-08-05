@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["libnet",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.86.0/core/fmt/trait.Display.html\" title=\"trait core::fmt::Display\">Display</a> for <a class=\"enum\" href=\"libnet/enum.Error.html\" title=\"enum libnet::Error\">Error</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.86.0/core/fmt/trait.Display.html\" title=\"trait core::fmt::Display\">Display</a> for <a class=\"enum\" href=\"libnet/enum.LinkClass.html\" title=\"enum libnet::LinkClass\">LinkClass</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.86.0/core/fmt/trait.Display.html\" title=\"trait core::fmt::Display\">Display</a> for <a class=\"enum\" href=\"libnet/enum.LinkFlags.html\" title=\"enum libnet::LinkFlags\">LinkFlags</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.86.0/core/fmt/trait.Display.html\" title=\"trait core::fmt::Display\">Display</a> for <a class=\"enum\" href=\"libnet/enum.LinkState.html\" title=\"enum libnet::LinkState\">LinkState</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.86.0/core/fmt/trait.Display.html\" title=\"trait core::fmt::Display\">Display</a> for <a class=\"enum\" href=\"libnet/pf_key/enum.Error.html\" title=\"enum libnet::pf_key::Error\">Error</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.86.0/core/fmt/trait.Display.html\" title=\"trait core::fmt::Display\">Display</a> for <a class=\"enum\" href=\"libnet/route/enum.Error.html\" title=\"enum libnet::route::Error\">Error</a>"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[1504]}

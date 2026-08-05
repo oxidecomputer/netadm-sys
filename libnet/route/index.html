@@ -1,0 +1,31 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Structures and functions for interacting with routing configuration and state."><title>libnet::route - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-6c3ea77c.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="libnet" data-themes="" data-resource-suffix="" data-rustdoc-version="1.86.0 (05f9846f8 2025-03-31)" data-channel="1.86.0" data-search-js="search-581efc7a.js" data-settings-js="settings-6dad6058.js" ><script src="../../static.files/storage-3a5871a4.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../static.files/main-4d63596a.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../libnet/index.html">libnet</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module route</a></h2><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li><li><a href="#functions" title="Functions">Functions</a></li></ul></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="../index.html">In crate libnet</a></h2></div></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">libnet</a></div><h1>Module <span>route</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/libnet/route.rs.html#3-596">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Structures and functions for interacting with routing configuration and
+state.</p>
+<p>This file contains machinery for interacting with the illumos router socket.
+This socket has the address family AF_ROUTE. Packets exchanged over an
+AF_ROUTE socket have a special header described by <code>[sys::rt_msghdr]</code>.</p>
+<p>The structure of an AF_ROUTE message is the following.</p>
+<div class="example-wrap"><pre class="language-text"><code>rt_msghdr: 74 bytes
+route_addr_element_1: N bytes
+route_addr_element_2: N bytes
+...
+route_addr_element_N: N bytes</code></pre></div>
+<p>In the rt_msghdr there is a field <code>addrs</code> which is a bitmask that identifies
+what address elements are present in the message. Members of this bitfield
+are constants with the name format <code>RTA_&lt;address name&gt;</code>. These include</p>
+<div class="example-wrap"><pre class="language-text"><code>RTA_DST =       1
+RTA_GATEWAY =   (1&lt;&lt;1)
+RTA_NETMASK =   (1&lt;&lt;2)
+RTA_GENMASK =   (1&lt;&lt;3)
+RTA_IFP =       (1&lt;&lt;4)
+RTA_IFA =       (1&lt;&lt;5)
+RTA_AUTHOR =    (1&lt;&lt;6)
+RTA_BRD =       (1&lt;&lt;7)
+RTA_SRC =       (1&lt;&lt;8)
+RTA_DELAY =     (1&lt;&lt;9)</code></pre></div>
+<p>Address elements always appear in the order they are defined in the bitmask.
+For example, a message containing RTA_DST RTA_GENMASK and RTA_AUTHOR will
+always be structured as</p>
+<div class="example-wrap"><pre class="language-text"><code>t_msghdr
+TA_DST
+TA_GENMASK
+TA_AUTHOR</code></pre></div></div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Route.html" title="struct libnet::route::Route">Route</a></dt><dt><a class="struct" href="struct.RtMsg.html" title="struct libnet::route::RtMsg">RtMsg</a></dt><dt><a class="struct" href="struct.SocketDlAddr.html" title="struct libnet::route::SocketDlAddr">Socket<wbr>DlAddr</a></dt></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.Error.html" title="enum libnet::route::Error">Error</a></dt></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.add_route.html" title="fn libnet::route::add_route">add_<wbr>route</a></dt><dt><a class="fn" href="fn.delete_route.html" title="fn libnet::route::delete_route">delete_<wbr>route</a></dt><dt><a class="fn" href="fn.ensure_route_present.html" title="fn libnet::route::ensure_route_present">ensure_<wbr>route_<wbr>present</a></dt><dt><a class="fn" href="fn.get_route.html" title="fn libnet::route::get_route">get_<wbr>route</a></dt><dt><a class="fn" href="fn.get_routes.html" title="fn libnet::route::get_routes">get_<wbr>routes</a></dt></dl></section></div></main></body></html>
