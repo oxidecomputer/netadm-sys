@@ -11,6 +11,7 @@ use libnet::{
     create_vnic_link, get_ipaddr_info, get_ipaddrs, get_link, get_links, ip,
     route, sys::MAXMACADDRLEN, IpState, LinkFlags, LinkHandle,
 };
+use libnet::{Ipv4, Ipv6};
 use oxnet::IpNet;
 use std::io::{stdout, Write};
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
@@ -208,6 +209,8 @@ struct CreateRoute {
     gateway: IpAddr,
     /// Route interface
     interface: Option<String>,
+    /// Route source address
+    source: Option<IpAddr>,
 }
 
 #[derive(Parser)]
@@ -476,7 +479,26 @@ fn create_addr(_opts: &Opts, _c: &Create, c: &CreateAddr) -> Result<()> {
 }
 
 fn create_route(_opts: &Opts, _c: &Create, c: &CreateRoute) -> Result<()> {
-    add_route(c.destination, c.gateway, c.interface.clone())?;
+    let ifx = c.interface.clone();
+    match (c.destination, c.gateway, c.source) {
+        (IpNet::V4(dst), IpAddr::V4(gw), None) => {
+            add_route::<Ipv4>(dst, gw, ifx, None)?
+        }
+        (IpNet::V4(dst), IpAddr::V4(gw), Some(IpAddr::V4(src))) => {
+            add_route::<Ipv4>(dst, gw, ifx, Some(src))?
+        }
+        (IpNet::V6(dst), IpAddr::V6(gw), None) => {
+            add_route::<Ipv6>(dst, gw, ifx, None)?
+        }
+        (IpNet::V6(dst), IpAddr::V6(gw), Some(IpAddr::V6(src))) => {
+            add_route::<Ipv6>(dst, gw, ifx, Some(src))?
+        }
+        _ => {
+            return Err(anyhow!(
+                "destination, gateway, and source must be the same IP family"
+            ))
+        }
+    }
     // should we print back?
     Ok(())
 }
@@ -496,7 +518,20 @@ fn create_tcp_md5(_opts: &Opts, _c: &Create, c: &CreateTcpMd5) -> Result<()> {
 }
 
 fn delete_route(_opts: &Opts, _c: &Delete, c: &DeleteRoute) -> Result<()> {
-    libnet::delete_route(c.destination, c.gateway, c.interface.clone())?;
+    let ifx = c.interface.clone();
+    match (c.destination, c.gateway) {
+        (IpNet::V4(dst), IpAddr::V4(gw)) => {
+            libnet::delete_route::<Ipv4>(dst, gw, ifx)?
+        }
+        (IpNet::V6(dst), IpAddr::V6(gw)) => {
+            libnet::delete_route::<Ipv6>(dst, gw, ifx)?
+        }
+        _ => {
+            return Err(anyhow!(
+                "destination and gateway must be the same IP family"
+            ))
+        }
+    }
     // should we print back?
     Ok(())
 }

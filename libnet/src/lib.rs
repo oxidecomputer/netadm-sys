@@ -4,10 +4,10 @@
 
 use colored::*;
 use num_enum::TryFromPrimitiveError;
-use oxnet::IpNet;
+use oxnet::{IpNet, Ipv4Net, Ipv6Net};
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
 use thiserror::Error;
 use tracing::debug;
@@ -34,6 +34,51 @@ mod ioctl;
 mod kstat;
 mod ndpd;
 mod nvlist;
+
+// This mod exists to provide a barrier for users of this library: they may use
+// it for the purposes of observing and enforcing trait bounds, but they may not
+// impl the trait for custom types.
+mod sealed {
+    pub trait Sealed {}
+    impl Sealed for crate::Ipv4 {}
+    impl Sealed for crate::Ipv6 {}
+}
+
+/// Groups together multiple types associated with an IP version.
+///
+/// This allows functions to accept generic arguments with an `AddressFamily`
+/// trait bound so that multiple arguments of different types associated with
+/// the same IP version can be grouped together at compile time. This disallows
+/// the mixing and matching of IP version structurally, rather than at runtime.
+/// e.g.
+/// ```rust
+/// # use libnet::AddressFamily;
+/// fn do_route_thing<A: AddressFamily>(
+///     route: A::Net,
+///     nexthop_ip: A::Addr,
+///     source_ip: A::Addr,
+/// ) {
+///     todo!()
+/// }
+/// ```
+pub trait AddressFamily: sealed::Sealed {
+    type Net: Copy + Into<IpNet>;
+    type Addr: Copy + Into<IpAddr>;
+}
+
+pub struct Ipv4;
+
+impl AddressFamily for Ipv4 {
+    type Net = Ipv4Net;
+    type Addr = Ipv4Addr;
+}
+
+pub struct Ipv6;
+
+impl AddressFamily for Ipv6 {
+    type Net = Ipv6Net;
+    type Addr = Ipv6Addr;
+}
 
 /// Error variants returned by netadm_sys.
 #[derive(thiserror::Error, Debug)]
@@ -432,10 +477,10 @@ pub fn get_routes() -> Result<Vec<crate::route::Route>, Error> {
     Ok(crate::route::get_routes()?)
 }
 
-/// Get route information for the provided `destination`
+/// Add a route to `destination` via `gateway`.
 pub use crate::route::add_route;
 
-/// Add a route to `destination` via `gateway`.
+/// Get route information for the provided `destination`
 pub use crate::route::get_route;
 
 /// Ensure a route to `destination` via `gateway` is present.
