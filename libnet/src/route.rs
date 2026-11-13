@@ -50,7 +50,7 @@ use crate::{
         RTA_DST, RTA_GATEWAY, RTA_GENMASK, RTA_IFA, RTA_IFP, RTA_NETMASK,
         RTA_SRC,
     },
-    IpNet,
+    AddressFamily, IpNet,
 };
 use std::mem::size_of;
 use std::slice::from_raw_parts;
@@ -413,45 +413,78 @@ pub fn get_routes() -> Result<Vec<Route>, Error> {
     Ok(result)
 }
 
-pub fn add_route(
-    destination: IpNet,
-    gateway: IpAddr,
+pub fn add_route<A: AddressFamily>(
+    destination: A::Net,
+    gateway: A::Addr,
     interface: Option<String>,
+    source: Option<A::Addr>,
 ) -> Result<(), Error> {
-    mod_route(destination, gateway, interface, sys::RTM_ADD as u8)
+    mod_route::<A>(destination, gateway, interface, source, sys::RTM_ADD as u8)
 }
 
-pub fn ensure_route_present(
-    destination: IpNet,
-    gateway: IpAddr,
+pub fn ensure_route_present<A: AddressFamily>(
+    destination: A::Net,
+    gateway: A::Addr,
     interface: Option<String>,
+    source: Option<A::Addr>,
 ) -> Result<(), Error> {
-    match add_route(destination, gateway, interface) {
-        Err(Error::IoError(e)) => {
-            if e.kind() == std::io::ErrorKind::AlreadyExists {
-                Ok(())
-            } else {
-                Err(Error::IoError(e))
-            }
-        }
-        result => result,
+    // The routing socket has no upsert, so we have to make our own.
+    // First, attempt to change the route. If it's missing, then try to add it.
+    match mod_route::<A>(
+        destination,
+        gateway,
+        interface.clone(),
+        source,
+        sys::RTM_CHANGE as u8,
+    ) {
+        Err(Error::DoesNotExist) => {}
+        result => return result,
     }
+
+    mod_route::<A>(destination, gateway, interface, source, sys::RTM_ADD as u8)
 }
 
-pub fn delete_route(
-    destination: IpNet,
-    gateway: IpAddr,
+pub fn delete_route<A: AddressFamily>(
+    destination: A::Net,
+    gateway: A::Addr,
     interface: Option<String>,
 ) -> Result<(), Error> {
-    mod_route(destination, gateway, interface, sys::RTM_DELETE as u8)
+    mod_route::<A>(destination, gateway, interface, None, sys::RTM_DELETE as u8)
 }
 
-fn mod_route(
-    destination: IpNet,
-    gateway: IpAddr,
+fn mod_route<A: AddressFamily>(
+    destination: A::Net,
+    gateway: A::Addr,
     interface: Option<String>,
+    source: Option<A::Addr>,
     cmd: u8,
 ) -> Result<(), Error> {
+    let destination: IpNet = destination.into();
+    let gateway: IpAddr = gateway.into();
+
+    // normalize None into :: or 0.0.0.0
+    let source = source.map(Into::into).unwrap_or(match destination {
+        IpNet::V4(_) => IpAddr::from(Ipv4Addr::UNSPECIFIED),
+        IpNet::V6(_) => IpAddr::from(Ipv6Addr::UNSPECIFIED),
+    });
+
+    // "no source" is encoded differently depending on the request type:
+    //
+    // RTM_ADD expects the full set of route attributes up front, so a missing
+    // RTA_SRC indicates that there is no source to be set. Attempting to use
+    // RTA_SRC with an empty/unspecified IP is rejected with EINVAL.
+    //
+    // RTM_CHANGE, on the other hand, expects this to be encoded in an RTA_SRC
+    // carrying an empty/unspecified IP address (:: / 0.0.0.0). RTA_SRC is also
+    // necessary for an RTM_CHANGE because it affects the change's semantics.
+    // Without RTA_SRC, Illumos assumes an RTM_CHANGE is attempting to
+    // overwite the route's nexthop to be the IP carried in RTA_GATEWAY. With
+    // RTA_SRC, Illumos interprets RTA_GATEWAY as an additional selector used to
+    // disambiguate between multiple routes to the same destination (e.g. ECMP).
+    //
+    // See: ip_rts_request_common() in inet/ip/ip_rts.c
+    let encode_src = cmd == sys::RTM_CHANGE as u8 || !source.is_unspecified();
+
     let mut sock = Socket::new(Domain::from(AF_ROUTE), Type::RAW, None)?;
     let mut msglen = size_of::<rt_msghdr>();
     match destination {
@@ -471,11 +504,19 @@ fn mod_route(
         }
     };
 
-    let flags = (sys::RTF_GATEWAY | sys::RTF_STATIC) as i32;
+    let mut flags = (sys::RTF_GATEWAY | sys::RTF_STATIC) as i32;
     let mut addrs = (RTA_DST | RTA_GATEWAY | RTA_NETMASK) as i32;
     if interface.is_some() {
         addrs |= sys::RTA_IFP as i32;
         msglen += size_of::<sockaddr_dl>();
+    }
+    if encode_src {
+        flags |= sys::RTF_SETSRC as i32;
+        addrs |= sys::RTA_SRC as i32;
+        match source {
+            IpAddr::V4(_) => msglen += size_of::<sockaddr_in>(),
+            IpAddr::V6(_) => msglen += size_of::<sockaddr_in6>(),
+        }
     }
 
     let req = rt_msghdr {
@@ -504,7 +545,16 @@ fn mod_route(
         serialize_dladdr(&mut buf, &ifp, destination.addr())?;
     }
 
-    let n = sock.write(&buf)?;
+    if encode_src {
+        serialize_addr(&mut buf, source);
+    }
+
+    let n = sock.write(&buf).map_err(|e| match e.raw_os_error() {
+        Some(libc::EEXIST) => Error::Exists,
+        Some(libc::ESRCH) => Error::DoesNotExist,
+        _ => Error::IoError(e),
+    })?;
+
     if n < buf.len() {
         return Err(Error::SystemError(format!(
             "short write: {} < {}",
